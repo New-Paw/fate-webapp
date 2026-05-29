@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">FATE-Flow State</h5>
+                <p id="fate-flow-state" class="display-6 fw-bold text-secondary">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Recently Train Job Number</h5>
+                <p id="train-job-number" class="display-6 fw-bold">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <h5 class="card-title">Recently Predicted Number</h5>
+                <p id="predicted-job-number" class="display-6 fw-bold">0</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Job List</span>
+        <button id="refresh-mainpage-btn" class="btn btn-sm btn-outline-primary">Refresh</button>
+    </div>
+    <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Job ID</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Role</th>
+                    <th>Party ID</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody id="job-list-body">
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Loading jobs...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

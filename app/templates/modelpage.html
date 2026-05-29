@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Trained Models</span>
+        <button id="refresh-models-btn" class="btn btn-outline-primary btn-sm" type="button">Refresh</button>
+    </div>
+
+    <div class="card-body table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Model ID</th>
+                    <th>Name</th>
+                    <th>Algorithm</th>
+                    <th>Version</th>
+                    <th>Created At</th>
+                    <th width="260">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="model-table-body">
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Loading models...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="viewModelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Model Detail</h5>
+                <button class="btn-close" type="button" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2"><strong>Model ID:</strong> <span id="view-model-id"></span></div>
+                <div class="mb-2"><strong>Name:</strong> <span id="view-model-name"></span></div>
+                <div class="mb-2"><strong>Algorithm:</strong> <span id="view-model-algorithm"></span></div>
+                <div class="mb-2"><strong>Version:</strong> <span id="view-model-version"></span></div>
+                <div class="mb-3"><strong>Description:</strong> <span id="view-model-description"></span></div>
+
+                <label class="form-label">FATE Raw Model Query Result</label>
+                <pre id="view-model-fate-output" class="log-box" style="min-height: 280px;">No data</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="edit-model-form" method="post" action="javascript:void(0);">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Model</h5>
+                    <button class="btn-close" type="button" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-model-id">
+
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input id="edit-model-name" type="text" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Version</label>
+                        <input id="edit-model-version" type="text" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea id="edit-model-description" class="form-control" rows="4"></textarea>
+                    </div>
+
+                    <div id="edit-model-message" class="small"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                    <button id="edit-model-save-btn" class="btn btn-primary" type="submit">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

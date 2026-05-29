@@ -23,6 +23,7 @@ The system supports:
 
 ## 2. Project Structure
 
+```text
 FATE_WEBAPP/
 │
 ├── app/
@@ -30,13 +31,12 @@ FATE_WEBAPP/
 │   │   └── auth.py
 │   │
 │   ├── models/
-│   │   ├── _init_.py
+│   │   ├── __init__.py
 │   │   ├── app_user.py
 │   │   ├── uploaded_file.py
 │   │   ├── job_record.py
 │   │   ├── model_record.py
-│   │   ├── prediction_record.py
-│   │   └── uploaded_file.py
+│   │   └── prediction_record.py
 │   │
 │   ├── routers/
 │   │   ├── auth.py
@@ -53,8 +53,8 @@ FATE_WEBAPP/
 │   │   └── remote_fate_service.py
 │   │
 │   ├── static/
-│   │   └── css/
-│   │       └── style.css
+│   │   ├── css/
+│   │   │   └── style.css
 │   │   └── js/
 │   │       └── app.js
 │   │
@@ -77,9 +77,9 @@ FATE_WEBAPP/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
-├── documentation
+├── documentation/
 └── README.md
-
+```
 ---
 
 ## 3. Installation

@@ -250,6 +250,8 @@ This account can be used to log in to the WebApp after the application is connec
 
 Important: This account is intended for testing only. Do not use this password in a production environment.
 
+---
+
 ### 5.1 Required .env Configuration for Testing
 
 The real .env file is not included in this GitHub repository because it contains sensitive configuration such as:
@@ -290,6 +292,8 @@ FATE_API_VERSION=
 
 The values of these variables must match the original test environment.
 
+---
+
 ### 5.2 Why the Original .env Is Required
 
 The administrator account already exists in the database.
@@ -311,6 +315,8 @@ FATE_ROOT
 If DATABASE_URL points to a different database, the administrator account may not exist.
 
 If APP_FERNET_KEY is changed, the WebApp may still verify the administrator login password, but it will not be able to decrypt the stored remote server password. In that case, FATE operations that require SSH access may fail.
+
+---
 
 ### 5.3 Testing Procedure with the Administrator Account
 Clone the repository:
@@ -337,6 +343,8 @@ Password: 123456
 
 After login, testers can use the WebApp.
 
+---
+
 ### 5.4 When to Register a New Account
 
 Register a new account instead of using the administrator account if:
@@ -351,6 +359,8 @@ During registration:
 
 the WebApp password will be stored as a hash;
 the remote server password will be encrypted using the current APP_FERNET_KEY.
+
+---
 
 ### 5.5 Security Notes for the Test Account
 

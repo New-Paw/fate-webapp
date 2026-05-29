@@ -23,6 +23,7 @@ The system supports:
 
 ## 2. Project Structure
 
+```text
 FATE_WEBAPP/
 │
 ├── app/
@@ -30,13 +31,12 @@ FATE_WEBAPP/
 │   │   └── auth.py
 │   │
 │   ├── models/
-│   │   ├── _init_.py
+│   │   ├── __init__.py
 │   │   ├── app_user.py
 │   │   ├── uploaded_file.py
 │   │   ├── job_record.py
 │   │   ├── model_record.py
-│   │   ├── prediction_record.py
-│   │   └── uploaded_file.py
+│   │   └── prediction_record.py
 │   │
 │   ├── routers/
 │   │   ├── auth.py
@@ -53,8 +53,8 @@ FATE_WEBAPP/
 │   │   └── remote_fate_service.py
 │   │
 │   ├── static/
-│   │   └── css/
-│   │       └── style.css
+│   │   ├── css/
+│   │   │   └── style.css
 │   │   └── js/
 │   │       └── app.js
 │   │
@@ -77,8 +77,9 @@ FATE_WEBAPP/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
-├── documentation
+├── documentation/
 └── README.md
+```
 
 ---
 
@@ -87,12 +88,9 @@ FATE_WEBAPP/
 ### 3.1 Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/fate-webapp.git
+git clone https://github.com/New-Paw/fate-webapp.git
 cd fate-webapp
 ```
-
-Replace `your-username` and `fate-webapp` with your actual GitHub username and repository name.
-
 ---
 
 ### 3.2 Create a Python Virtual Environment
@@ -119,21 +117,18 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Make sure the required database driver is installed. For example, if you use Oracle, the project may require `oracledb` or a compatible Oracle driver depending on your configuration.
-
+Make sure the required database driver is installed. For example, if Oracle is used, the project may require oracledb or a compatible Oracle driver depending on the database configuration.
 ---
 
 ## 4. Environment Configuration
 
 This project uses a `.env` file to store local configuration and secrets.
 
-The real `.env` file must not be uploaded to GitHub.
+The real .env file is not uploaded to GitHub.
 
-The repository should only include:
+The repository only include:
 
-```text
 .env.example
-```
 
 To create your local `.env` file:
 
@@ -148,12 +143,6 @@ Then edit `.env` and fill in your own values.
 ### 4.1 Example `.env` Configuration
 
 ```env
-# ============================================================
-# FATE WebApp Environment Example
-# Copy this file to ".env" and fill in your own real values.
-# Do NOT commit the real ".env" file to GitHub.
-# ============================================================
-
 
 # ------------------------------------------------------------
 # FastAPI App
@@ -175,7 +164,6 @@ DATABASE_URL=oracle+oracledb://YOUR_DB_USERNAME:YOUR_DB_PASSWORD@YOUR_DB_HOST:15
 # ------------------------------------------------------------
 # Remote Server SSH Configuration
 # Server username/password should normally be registered through the WebApp UI.
-# Do NOT put real server passwords in .env.example.
 # ------------------------------------------------------------
 GRACE_HOST=grace1.fit.vutbr.cz
 GRACE_PORT=22
@@ -209,10 +197,9 @@ APP_SECRET_KEY=replace_with_random_secret_key
 # Server Password Encryption Key
 # Generate APP_FERNET_KEY:
 # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-#
+# Important: # If you want to reuse an existing administrator account from # an existing database, this key must be the same key that was # used when that account was created.
 # Warning:
-# If APP_FERNET_KEY is changed later, previously encrypted server
-# passwords in the database will no longer be decryptable.
+# If APP_FERNET_KEY is changed later, previously encrypted server passwords in the database will no longer be decryptable.
 # ------------------------------------------------------------
 APP_FERNET_KEY=replace_with_fernet_key
 
@@ -246,12 +233,134 @@ Important:
 * `APP_SECRET_KEY` is used to sign JWT access tokens.
 * `APP_FERNET_KEY` is used to encrypt and decrypt remote server passwords.
 * If `APP_FERNET_KEY` is changed after users are registered, previously encrypted server passwords cannot be decrypted.
+* If an existing administrator account should be reused, the original APP_FERNET_KEY must be used.
 
 ---
 
-## 5. How to Run
+## 5. Shared Test Environment and Administrator Account
 
-### 5.1 Start the Web Application
+This project supports a shared test environment for demonstration and testing purposes.
+
+For testing, a preconfigured administrator account is available in the existing project database:
+
+Account: administrator
+Password: 123456
+
+This account can be used to log in to the WebApp after the application is connected to the correct database and environment configuration.
+
+Important: This account is intended for testing only. Do not use this password in a production environment.
+
+### 5.1 Required .env Configuration for Testing
+
+The real .env file is not included in this GitHub repository because it contains sensitive configuration such as:
+
+Database connection string
+Application secret key
+Fernet encryption key
+Remote server settings
+FATE runtime settings
+
+To use the shared test environment, testers must obtain the real .env file from the project maintainer through a private and secure channel.
+
+After receiving the .env file, place it in the project root directory:
+
+FATE_WEBAPP/
+├── app/
+├── .env
+├── .env.example
+├── requirements.txt
+└── README.md
+
+The .env file must contain the following configuration keys:
+
+DATABASE_URL=
+APP_SECRET_KEY=
+APP_FERNET_KEY=
+ACCESS_TOKEN_EXPIRE_MINUTES=
+
+GRACE_HOST=
+GRACE_PORT=
+
+FATE_CONTAINER=
+FATE_ROOT=
+
+FATE_HOST=
+FATE_PORT=
+FATE_API_VERSION=
+
+The values of these variables must match the original test environment.
+
+### 5.2 Why the Original .env Is Required
+
+The administrator account already exists in the database.
+
+To use this account correctly, the application must connect to the same database that stores the administrator user record.
+
+In addition, the existing remote server password stored in the database was encrypted using the original APP_FERNET_KEY.
+
+Therefore, the following values must match the original environment:
+
+DATABASE_URL
+APP_FERNET_KEY
+APP_SECRET_KEY
+GRACE_HOST
+GRACE_PORT
+FATE_CONTAINER
+FATE_ROOT
+
+If DATABASE_URL points to a different database, the administrator account may not exist.
+
+If APP_FERNET_KEY is changed, the WebApp may still verify the administrator login password, but it will not be able to decrypt the stored remote server password. In that case, FATE operations that require SSH access may fail.
+
+### 5.3 Testing Procedure with the Administrator Account
+Clone the repository:
+git clone https://github.com/New-Paw/fate-webapp.git
+cd fate-webapp
+Create and activate a Python virtual environment:
+python -m venv .venv
+source .venv/bin/activate
+
+On Windows:
+
+.venv\Scripts\activate
+Install dependencies:
+pip install -r requirements.txt
+Obtain the real .env file from the project maintainer.
+Put the .env file in the project root directory.
+Start the WebApp:
+uvicorn app.main:app --reload
+Open the browser:
+http://127.0.0.1:8000
+Log in with the test account:
+Account: administrator
+Password: 123456
+
+After login, testers can use the WebApp.
+
+### 5.4 When to Register a New Account
+
+Register a new account instead of using the administrator account if:
+
+you are using a new empty database;
+you do not have access to the original .env file;
+you generated a new APP_FERNET_KEY;
+the administrator account does not exist in your database;
+you want to use a different remote server username and password.
+
+During registration:
+
+the WebApp password will be stored as a hash;
+the remote server password will be encrypted using the current APP_FERNET_KEY.
+
+### 5.5 Security Notes for the Test Account
+
+I did not include any real passwords, real database connections, real Fernet Keys or administrator passwords. The README only describes the usage process and precautions. If you need to test using my original environment, please contact me: Jiangpw5379@outlook.com.
+
+---
+
+## 6. How to Run
+
+### 6.1 Start the Web Application
 
 From the project root directory:
 
@@ -267,7 +376,7 @@ http://127.0.0.1:8000
 
 ---
 
-### 5.2 First-Time Usage
+### 6.2 First-Time Usage
 
 1. Open the application in the browser.
 2. Register a WebApp account.
@@ -278,9 +387,9 @@ http://127.0.0.1:8000
 
 ---
 
-## 6. Main Features
+## 7. Main Features
 
-### 6.1 User Authentication
+### 7.1 User Authentication
 
 The application provides registration, login, and logout functionality.
 
@@ -304,7 +413,7 @@ Features:
 
 ---
 
-### 6.2 Dataset Management
+### 7.2 Dataset Management
 
 The dataset module allows users to upload CSV files and import them into FATE.
 
@@ -331,7 +440,7 @@ Features:
 
 ---
 
-### 6.3 Training Management
+### 7.3 Training Management
 
 The training module allows users to create FATE training jobs from uploaded datasets.
 
@@ -367,7 +476,7 @@ Homo Logistic Regression / HomoLR
 
 ---
 
-### 6.4 Model Management
+### 7.4 Model Management
 
 The model module provides local model record management and FATE model query functions.
 
@@ -388,13 +497,9 @@ Features:
 * Delete model records
 * Delete WebApp-generated pipeline `.pkl` files from the remote server
 
-Note:
-
-Deleting a model from the WebApp removes the local database record and the generated pipeline file. It may not remove all internal FATE model storage files.
-
 ---
 
-### 6.5 Prediction Management
+### 7.5 Prediction Management
 
 The prediction module allows users to create prediction jobs based on trained models and prediction datasets.
 
@@ -424,7 +529,7 @@ Features:
 
 ---
 
-### 6.6 Dashboard
+### 7.6 Dashboard
 
 The main dashboard shows the current FATE Flow status and recent job records.
 
@@ -447,9 +552,9 @@ Features:
 
 ---
 
-## 7. API Overview
+## 8. API Overview
 
-### 7.1 Authentication Routes
+### 8.1 Authentication Routes
 
 | Method | Path        | Description                           |
 | ------ | ----------- | ------------------------------------- |
@@ -461,7 +566,7 @@ Features:
 
 ---
 
-### 7.2 Page Routes
+### 8.2 Page Routes
 
 | Method | Path         | Description              |
 | ------ | ------------ | ------------------------ |
@@ -473,7 +578,7 @@ Features:
 
 ---
 
-### 7.3 Dataset APIs
+### 8.3 Dataset APIs
 
 Prefix:
 
@@ -493,7 +598,7 @@ Prefix:
 
 ---
 
-### 7.4 FATE Status and Dashboard APIs
+### 8.4 FATE Status and Dashboard APIs
 
 Prefix:
 
@@ -510,7 +615,7 @@ Prefix:
 
 ---
 
-### 7.5 Training APIs
+### 8.5 Training APIs
 
 | Method | Path                          | Description                              |
 | ------ | ----------------------------- | ---------------------------------------- |
@@ -524,7 +629,7 @@ Prefix:
 
 ---
 
-### 7.6 Job APIs
+### 8.6 Job APIs
 
 | Method | Path                           | Description                             |
 | ------ | ------------------------------ | --------------------------------------- |
@@ -534,7 +639,7 @@ Prefix:
 
 ---
 
-### 7.7 Data Table APIs
+### 8.7 Data Table APIs
 
 | Method | Path                      | Description                            |
 | ------ | ------------------------- | -------------------------------------- |
@@ -547,7 +652,7 @@ Prefix:
 
 ---
 
-### 7.8 Model APIs
+### 8.8 Model APIs
 
 | Method   | Path                          | Description                                           |
 | -------- | ----------------------------- | ----------------------------------------------------- |
@@ -563,7 +668,7 @@ Prefix:
 
 ---
 
-### 7.9 Prediction APIs
+### 8.9 Prediction APIs
 
 | Method   | Path                                       | Description                                   |
 | -------- | ------------------------------------------ | --------------------------------------------- |
@@ -579,9 +684,9 @@ Prefix:
 
 ---
 
-## 8. Notes and Important Considerations
+## 9. Notes and Important Considerations
 
-### 8.1 Do Not Commit `.env`
+### 9.1 Do Not Commit `.env`
 
 The real `.env` file contains sensitive data such as:
 
@@ -591,7 +696,7 @@ The real `.env` file contains sensitive data such as:
 * Remote server configuration
 * Possible server credentials
 
-Only `.env.example` should be committed to GitHub.
+So only `.env.example` is committed to GitHub.
 
 Recommended `.gitignore` entries:
 
@@ -610,7 +715,7 @@ __pycache__/
 
 ---
 
-### 8.2 Remote Server Password Encryption
+### 9.2 Remote Server Password Encryption
 
 Remote server passwords are encrypted using `APP_FERNET_KEY`.
 
@@ -620,7 +725,7 @@ If the key changes, existing encrypted passwords in the database cannot be decry
 
 ---
 
-### 8.3 FATE Environment Assumptions
+### 9.3 FATE Environment Assumptions
 
 This project assumes:
 
@@ -633,7 +738,7 @@ This project assumes:
 
 ---
 
-### 8.4 Current Algorithm Support
+### 9.4 Current Algorithm Support
 
 The current dynamic training pipeline mainly supports:
 
@@ -641,13 +746,13 @@ The current dynamic training pipeline mainly supports:
 Homo Logistic Regression / HomoLR
 ```
 
-Some algorithm names may be mapped internally to `HomoLR`.
+Algorithm names mapped internally to `HomoLR`.
 
-If additional algorithms are required, `RemoteFateService.build_training_pipeline_script()` should be extended.
+If additional algorithms are required, `RemoteFateService.build_training_pipeline_script()` can be extended.
 
 ---
 
-### 8.5 CSV Format Requirements
+### 9.5 CSV Format Requirements
 
 Uploaded CSV files should contain an ID column.
 
@@ -663,7 +768,7 @@ For training datasets, the default label column name is:
 label
 ```
 
-The system automatically creates a processed CSV with an additional `match_id` column because the current FATE HomoLR environment requires it.
+The system automatically creates a processed CSV with an additional `match_id` column because the FATE HomoLR environment requires it.
 
 Example training CSV:
 
@@ -683,7 +788,7 @@ id,match_id,feature1,feature2,label
 
 ---
 
-### 8.6 Database Table Creation
+### 9.6 Database Table Creation
 
 The application uses:
 
@@ -691,7 +796,7 @@ The application uses:
 Base.metadata.create_all(bind=engine)
 ```
 
-to automatically create database tables during startup.
+To automatically create database tables during startup.
 
 This is convenient for course projects and prototypes.
 
@@ -699,24 +804,13 @@ For production systems, it is recommended to use a migration tool such as Alembi
 
 ---
 
-### 8.7 Multi-User Data Isolation
+### 9.7 Multi-User Data Isolation
 
 The current code checks user login status, but some database queries may not yet filter records by `user_id`.
 
-If this project is extended for multiple users, it is recommended to add `user_id` fields to:
-
-```text
-UploadedFile
-JobRecord
-ModelRecord
-PredictionRecord
-```
-
-and filter records by the current user.
-
 ---
 
-### 8.8 Error Handling
+### 9.8 Error Handling
 
 Training, prediction, and upload operations depend on remote SSH, Docker, FATE Flow, and pipeline execution.
 
@@ -731,41 +825,6 @@ If a task fails, check:
 
 ---
 
-## 9. Development Commands
-
-Start the app:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-Check Git status before pushing:
-
-```bash
-git status
-```
-
-Remove `.env` from Git tracking if it was accidentally added:
-
-```bash
-git rm --cached .env
-```
-
-Commit changes:
-
-```bash
-git add .
-git commit -m "Update FATE WebApp"
-```
-
-Push to GitHub:
-
-```bash
-git push
-```
-
----
-
 ## 10. License
 
-This project is intended for academic and learning purposes. Add your preferred license here if needed.
+This project is intended for academic and learning purposes.

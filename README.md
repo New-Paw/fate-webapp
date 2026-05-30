@@ -696,7 +696,7 @@ Prefix:
 
 ## 9. Notes and Important Considerations
 
-### 9.1 Do Not Commit `.env`
+### 9.1 `.env`
 
 The real `.env` file contains sensitive data such as:
 

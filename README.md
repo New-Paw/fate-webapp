@@ -833,9 +833,3 @@ If a task fails, check:
 * Returned `stdout` and `stderr`
 * FATE task error reports
 * Remote generated scripts under `/data/projects/fate/examples`
-
----
-
-## 10. License
-
-This project is intended for academic and learning purposes.

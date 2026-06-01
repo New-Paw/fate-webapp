@@ -118,6 +118,7 @@ pip install -r requirements.txt
 ```
 
 Make sure the required database driver is installed. For example, if Oracle is used, the project may require oracledb or a compatible Oracle driver depending on the database configuration.
+
 ---
 
 ## 4. Environment Configuration

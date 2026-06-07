@@ -16,7 +16,7 @@ services:
       - "5500:5500"
 
     environment:
-      # ORACLE_PWD is used to set the passwords for database administrators such as SYS, SYSTEM, and PDBADMIN.
+      # ORACLE_PWD is used to set the passwords for database administrators.
       ORACLE_PWD: ${ORACLE_PWD}
 
       # ORACLE_CHARACTERSET is used to set the character set for the Oracle database.

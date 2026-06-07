@@ -1,8 +1,6 @@
 from pathlib import Path
 import sys
 
-
-
 # Add project root directory to Python import path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -18,7 +16,6 @@ from app.models.prediction_record import PredictionRecord
 
 from app.config import settings
 from app.services.auth_service import hash_password, encrypt_server_password
-
 
 def main():
 

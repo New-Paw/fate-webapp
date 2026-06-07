@@ -57,9 +57,6 @@ class RemoteFateService:
 
     # This method ensures that the FATE container remains in a running state.
     def _ensure_container_running(self):
-        """
-        ssh -> docker start standalone_fate
-        """
         cmd = (
             f"docker ps -a --format '{{{{.Names}}}}' | grep -w {self.container} >/dev/null 2>&1 "
             f"&& docker start {self.container} >/dev/null 2>&1 || true"
@@ -68,22 +65,19 @@ class RemoteFateService:
 
     # This method involves performing instructions within the container.
     def _run_in_container(self, command: str):
-        """
-        ssh
-        docker start standalone_fate
-        docker exec standalone_fate bash
-        cd /root/fate
-        source bin/init_env.sh
-        <The input command>
-        """
         self._ensure_container_running()
+
+        full_inner_command = (
+            f"cd {self.fate_root} && "
+            f"source bin/init_env.sh && "
+            f"{command}"
+        )
 
         full_command = (
             f"docker exec {self.container} bash -lc "
-            f"\"cd {self.fate_root} && "
-            f"source bin/init_env.sh && "
-            f"{command}\""
+            f"{shlex.quote(full_inner_command)}"
         )
+
         return self._run_ssh_command(full_command)
 
     # Ensure that the operating environment is functioning properly.
@@ -969,13 +963,150 @@ except Exception:
             "raw_stderr": result.get("stderr", "")
         }
 
-    # Following the "output/data/download" approach, combine the text in the prediction result directory.
+    # Query and download the prediction result from FATE.
     def get_prediction_result_text(self, job_id: str):
-        cmd = f'''
-mkdir -p output && \
-flow output query-data-table -j {job_id} -r guest -p 9999 || true
-'''
-        return self._run_in_container(cmd)
+
+        safe_job_id = shlex.quote(str(job_id))
+
+        # Step 1: query output table information from the prediction component.
+        query_cmd = (
+            f"flow output query-data-table "
+            f"-j {safe_job_id} "
+            f"-r guest "
+            f"-p 9999 "
+            f"-tn homo_lr_0"
+        )
+
+        query_result = self._run_in_container(query_cmd)
+        query_stdout = query_result.get("stdout", "")
+        query_stderr = query_result.get("stderr", "")
+
+        parsed = self._extract_json_from_output(query_stdout)
+
+        if not isinstance(parsed, dict):
+            return {
+                "success": False,
+                "stdout": query_stdout,
+                "stderr": (
+                    "Failed to parse prediction output table information.\n"
+                    f"Query stderr:\n{query_stderr}"
+                ),
+                "query_stdout": query_stdout,
+                "query_stderr": query_stderr,
+                "query_command": query_cmd,
+            }
+
+        # Step 2: extract output table namespace and name.
+        output_tables = []
+
+        for key in ["test_output_data", "predict_output_data", "output_data", "data"]:
+            value = parsed.get(key)
+
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict) and item.get("namespace") and item.get("name"):
+                        output_tables.append({
+                            "namespace": str(item.get("namespace")),
+                            "name": str(item.get("name")),
+                            "source_key": key,
+                        })
+
+            elif isinstance(value, dict):
+                if value.get("namespace") and value.get("name"):
+                    output_tables.append({
+                        "namespace": str(value.get("namespace")),
+                        "name": str(value.get("name")),
+                        "source_key": key,
+                    })
+
+        if not output_tables:
+            return {
+                "success": False,
+                "stdout": query_stdout,
+                "stderr": (
+                    "Prediction job succeeded, but no downloadable output table was found.\n"
+                    "Expected keys include test_output_data / predict_output_data / output_data."
+                ),
+                "query_stdout": query_stdout,
+                "query_stderr": query_stderr,
+                "query_command": query_cmd,
+            }
+
+        output_table = output_tables[0]
+        namespace = output_table["namespace"]
+        table_name = output_table["name"]
+
+        safe_namespace = shlex.quote(namespace)
+        safe_table_name = shlex.quote(table_name)
+
+        # Step 3: download result table.
+        result_dir = f"./output/prediction_{job_id}"
+        safe_result_dir = shlex.quote(result_dir)
+
+        download_cmd = (
+            f"rm -rf {safe_result_dir} && "
+            f"mkdir -p {safe_result_dir} && "
+            f"flow data download "
+            f"--namespace {safe_namespace} "
+            f"--name {safe_table_name} "
+            f"--path {safe_result_dir}"
+        )
+
+        download_result = self._run_in_container(download_cmd)
+        download_stdout = download_result.get("stdout", "")
+        download_stderr = download_result.get("stderr", "")
+
+        # Step 4: read downloaded result files.
+        cat_cmd = f"""
+    if [ -d {safe_result_dir} ]; then
+    printf '%s\\n' 'Prediction output table:'
+    printf '%s\\n' 'namespace={namespace}'
+    printf '%s\\n' 'name={table_name}'
+    printf '%s\\n' ''
+    printf '%s\\n' 'Downloaded files:'
+    find {safe_result_dir} -type f | sort
+    printf '%s\\n' ''
+    printf '%s\\n' 'Prediction result content:'
+    printf '%s\\n' '=========================='
+    find {safe_result_dir} -type f | sort | while read f; do
+        printf '%s\\n' ''
+        printf '%s\\n' "===== $f ====="
+        cat "$f"
+        printf '%s\\n' ''
+    done
+    else
+    printf '%s\\n' 'Prediction result directory not found: {result_dir}'
+    fi
+    """
+
+        cat_result = self._run_in_container(cat_cmd)
+        cat_stdout = cat_result.get("stdout", "")
+        cat_stderr = cat_result.get("stderr", "")
+
+        success = (
+            bool(cat_stdout.strip())
+            and "Prediction result directory not found" not in cat_stdout
+            and (
+                "predict_score" in cat_stdout
+                or "Prediction result content" in cat_stdout
+                or "0.csv" in cat_stdout
+            )
+        )
+
+        return {
+            "success": success,
+            "stdout": cat_stdout,
+            "stderr": cat_stderr,
+            "query_stdout": query_stdout,
+            "query_stderr": query_stderr,
+            "download_stdout": download_stdout,
+            "download_stderr": download_stderr,
+            "query_command": query_cmd,
+            "download_command": download_cmd,
+            "output_namespace": namespace,
+            "output_table_name": table_name,
+            "output_tables": output_tables,
+        }
     
     # This method is responsible for writing the binary files uploaded by the browser to the remote FATE container.
     def write_temp_dataset_file(self, remote_path: str, content: bytes):

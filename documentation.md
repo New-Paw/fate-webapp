@@ -29,9 +29,9 @@ The main purpose of this project is to build a complete and usable management sy
 * dataset upload and FATE table registration;
 * training task creation and job tracking;
 * trained model record management;
-* prediction task creation and result querying;
+* prediction task creation, result querying, and local result download;
 * synchronization between database records, FATE tables, and generated server files;
-* preparation for GitHub-based project sharing and testing.
+* preparation for GitHub-based project sharing and Docker Oracle-based testing.
 
 In summary, this project transforms a command-line-based federated learning workflow into a structured WebApp workflow. It improves usability, reduces repetitive manual operations, and provides a clearer foundation for managing FATE experiments in a year project environment.
 
@@ -453,33 +453,57 @@ SQLAlchemy is important in this project because it provides a structured way to 
 
 ## 3.6 Database System
 
-The project stores application data in a relational database. The database connection is controlled by the `DATABASE_URL` value in the `.env` file.
+The project stores WebApp-side application data in an Oracle database. In the latest version of the project, the database is provided through a local Docker Oracle XE container instead of relying on the original external database.
 
-The system can support different database backends depending on the connection string and installed driver. For development or testing, SQLite can be used. For the project environment, an Oracle-style connection can be used.
+This change improves the reproducibility of the project. Other testers do not need access to the original development database. Instead, they can start their own local Oracle XE database by using Docker Compose.
 
-Example SQLite configuration:
+The local Docker Oracle database is started with:
 
-```env id="9rvr6q"
-DATABASE_URL=sqlite:///./fate_webapp.db
+```bash
+docker compose up -d oracle-db
 ```
 
-Example Oracle-style configuration:
+The WebApp connects to this database through the `DATABASE_URL` value in the `.env` file.
 
-```env id="lqmqmx"
-DATABASE_URL=oracle+oracledb://USERNAME:PASSWORD@HOST:PORT/?service_name=SERVICE_NAME
+The default local Docker Oracle connection is:
+
+```env
+DATABASE_URL=oracle+oracledb://FATE_APP:fate_app_password@127.0.0.1:1521/?service_name=XEPDB1
 ```
 
-The database is used to store WebApp-side records, while FATE stores its own internal data tables and job information separately.
+The application database user is:
 
-This means the WebApp needs to maintain consistency between:
+```text
+Username: FATE_APP
+Password: fate_app_password
+Service name: XEPDB1
+```
 
-```text id="1xgykk"
-WebApp database records
+This user is created by the SQL initialization script:
+
+```text
+docker/oracle/init/01_create_app_user.sql
+```
+
+The database is used to store WebApp-side records, including:
+
+```text
+AppUser
+UploadedFile
+JobRecord
+ModelRecord
+PredictionRecord
+```
+
+FATE still stores its own internal data tables and job information separately inside the remote FATE environment. Therefore, the WebApp needs to maintain consistency between:
+
+```text
+Docker Oracle WebApp database records
 FATE internal tables
-Generated files on the remote server
+Generated files on the remote FATE server
 ```
 
-For this reason, deletion and cleanup logic is an important part of the project.
+The Docker Oracle database makes GitHub-based testing easier because each tester can create the same database environment locally.
 
 ---
 
@@ -597,25 +621,49 @@ This layer is one of the most important parts of the project because it bridges 
 
 ## 3.10 Docker
 
-Docker is used to run the standalone FATE environment on the remote server.
+Docker is used in two different parts of this project.
+
+The first Docker environment is the local Docker Oracle database. It is used to provide a reproducible database environment for the WebApp.
+
+```text
+Local machine
+    ↓
+Docker Oracle XE container
+    ↓
+WebApp database tables
+```
+
+This local database stores users, uploaded file records, job records, model records, and prediction records.
+
+The second Docker environment is the remote FATE Docker container. FATE runs inside a Docker container on the remote server.
+
+```text
+Remote server
+    ↓
+FATE Docker container
+    ↓
+FATE runtime environment
+```
 
 The FATE container name is configured in `.env`:
 
-```env id="q9ejoh"
+```env
 FATE_CONTAINER=standalone_fate
 ```
 
-The WebApp backend checks whether the container is running and starts it if necessary. Then it executes commands inside the container.
+The WebApp backend connects to the remote server through SSH, checks or starts the FATE container, and executes FATE commands inside it.
 
-The typical command structure is:
+Therefore, the two Docker environments have different purposes:
 
-```bash id="vyyf26"
-docker exec <container_name> bash -lc "<command>"
+```text
+Docker Oracle container:
+    local database for WebApp records
+
+Remote FATE container:
+    remote runtime for federated learning operations
 ```
 
-Inside the container, the backend enters the FATE root directory and loads the FATE environment before running commands.
-
-This is necessary because FATE commands require the correct runtime environment.
+This distinction is important because starting the Docker Oracle database does not start FATE. FATE operations still depend on the remote server and its FATE Docker container.
 
 ---
 
@@ -1096,11 +1144,35 @@ This allows users to run predictions without manually writing or executing FATE 
 
 ---
 
-### 4.5.4 Prediction Status and Result Query
+### 4.5.4 Prediction Status, Result Query, and Result Download
 
 The system should allow users to query prediction status and prediction results by prediction Job ID.
 
 The prediction result should be displayed in the WebApp so that users can inspect the output without entering the remote server manually.
+
+In the current implementation, the Predicted Page also provides a **Download** button. This button allows users to download the prediction result to a local text file.
+
+The prediction result is not stored directly in the WebApp database. The database stores the prediction record and prediction Job ID. When the user views or downloads a result, the backend queries the FATE output table and downloads the result data from FATE.
+
+The result retrieval process is:
+
+```text
+Prediction Job ID
+        ↓
+Query FATE output table of homo_lr_0
+        ↓
+Extract output table namespace and name
+        ↓
+Download output table by flow data download
+        ↓
+Read downloaded CSV/meta files
+        ↓
+Return readable result text to frontend
+        ↓
+Display in modal or download as local .txt file
+```
+
+This requirement makes prediction results easier to inspect and export from the WebApp.
 
 ---
 
@@ -1179,7 +1251,7 @@ The system should satisfy the following security requirements:
 3. Remote server passwords must be encrypted before saving.
 4. JWT access tokens should be stored in HTTP-only cookies.
 5. Protected pages and APIs should require authentication.
-6. The real .env file dosen't commit to GitHub.
+6. The real `.env` file is not committed to GitHub.
 7. .env.example is provided as a safe configuration template.
 8. Sensitive values such as APP_SECRET_KEY and APP_FERNET_KEY should remain private.
 ```
@@ -1263,32 +1335,46 @@ These requirements help keep the WebApp database, FATE environment, and remote s
 
 ## 4.12 Deployment and GitHub Submission
 
-This project can be downloaded and tested by others, but the env file needs to be reconfigured.
+This project should be suitable for GitHub submission and local testing by other people.
 
-Therefore, the project should include:
+To support this, the project now provides a Docker-based Oracle database setup. Testers can create their own local Oracle database instead of connecting to the original development database.
+
+The real `.env` file is not uploaded to GitHub.
+
+The intended testing workflow is:
 
 ```text
-README.md
-.env
-.gitignore
-requirements.txt
-documentation/
-clear project structure
-test account instructions
-installation steps
-running steps
-API overview
-security notes
+Clone the repository
+        ↓
+Create Python virtual environment
+        ↓
+Install dependencies
+        ↓
+Copy .env.example to .env
+        ↓
+Fill in local secrets and remote FATE server credentials
+        ↓
+Start Docker Oracle database
+        ↓
+Run scripts/seed_admin.py
+        ↓
+Start the WebApp
+        ↓
+Login with administrator / 123456
 ```
 
-For testing with the existing administrator account, and you can obtain the configurations that I have already set, the documentation should clearly explain that:
+The administrator account is not distributed inside a pre-filled database volume. Instead, it is created locally by `scripts/seed_admin.py`.
+
+This is safer because the remote FATE server password is not stored in GitHub or inside a shared database image. The password is read from the local `.env` file, encrypted using `APP_FERNET_KEY`, and then saved into the local Docker Oracle database.
+
+The default testing account is:
 
 ```text
 Account: administrator
 Password: 123456
 ```
 
-Can only work if the application connects to the correct existing database and uses the original `APP_FERNET_KEY`.
+This account works after `scripts/seed_admin.py` has been executed successfully.
 
 ---
 
@@ -1342,27 +1428,41 @@ Each layer has a clear responsibility. The frontend provides user interaction. T
 
 The system architecture can be summarized as follows:
 
-```text id="1xbkfk"
+```text
 User Browser
     ↓
 Jinja2 Templates + app.js
     ↓
 FastAPI Routers
     ↓
-SQLAlchemy Models + Service Classes
+Service Layer
     ↓
-Relational Database
+Local Docker Oracle Database
     ↓
 SSH Connection
     ↓
 Remote Server
     ↓
-Docker Container
+Remote FATE Docker Container
     ↓
 FATE Runtime Environment
 ```
 
-The WebApp itself does not directly implement federated learning algorithms. Instead, it acts as a management interface above FATE. The actual data upload, training, model generation, prediction, and job execution are performed by FATE.
+The WebApp itself does not directly implement federated learning algorithms. Instead, it acts as a management interface above FATE.
+
+The local Docker Oracle database stores WebApp-side records, such as users, uploaded files, jobs, models, and predictions.
+
+The remote FATE Docker container performs the actual FATE operations, including data upload, training, prediction, job query, and table cleanup.
+
+This architecture separates record management from federated learning execution:
+
+```text
+Local Docker Oracle:
+    WebApp records and metadata
+
+Remote FATE Docker:
+    federated learning execution
+```
 
 ---
 
@@ -1472,30 +1572,44 @@ This design keeps the router files cleaner and makes the remote execution logic 
 
 The database layer stores WebApp-side records. It does not replace FATE internal storage. Instead, it records the information needed by the WebApp to manage datasets, jobs, models, and predictions.
 
+In the current version, the database is provided by a local Docker Oracle XE container.
+
+The database container is started by:
+
+```bash
+docker compose up -d oracle-db
+```
+
 The database is configured in:
 
-```text id="6ifw0i"
+```text
 app/db.py
+```
+
+The connection string is controlled by:
+
+```env
+DATABASE_URL=oracle+oracledb://FATE_APP:fate_app_password@127.0.0.1:1521/?service_name=XEPDB1
 ```
 
 The main SQLAlchemy models are:
 
-| Model              | Purpose                                                     |
-| ------------------ | ----------------------------------------------------------- |
-| `AppUser`          | Stores WebApp users and encrypted remote server credentials |
-| `UploadedFile`     | Stores uploaded dataset metadata and FATE table mapping     |
-| `JobRecord`        | Stores training and prediction job records                  |
-| `ModelRecord`      | Stores trained model metadata                               |
-| `PredictionRecord` | Stores prediction task records                              |
+| Model | Purpose |
+|---|---|
+| `AppUser` | Stores WebApp users and encrypted remote server credentials |
+| `UploadedFile` | Stores uploaded dataset metadata and FATE table mapping |
+| `JobRecord` | Stores training and prediction job records |
+| `ModelRecord` | Stores trained model metadata |
+| `PredictionRecord` | Stores prediction task records |
 
 The database layer is used by both `file_storage.py` and `fate_api.py`.
 
 Example:
 
-```text id="y6vjsl"
+```text
 User uploads a dataset
     ↓
-UploadedFile record is created
+UploadedFile record is created in Docker Oracle
     ↓
 FATE namespace and table_name are saved
     ↓
@@ -1816,15 +1930,46 @@ With these tables, the WebApp can show previous jobs, trained models, and predic
 
 ## 6.4 Database Initialization
 
-In `app/main.py`, I import all model classes before calling:
+The project uses two steps to initialize the database.
 
-```python id="figd6z"
+The first step is Oracle user initialization. This is handled by the Docker Oracle setup script:
+
+```text
+docker/oracle/init/01_create_app_user.sql
+```
+
+This script creates the WebApp database user:
+
+```text
+FATE_APP / fate_app_password
+```
+
+It also grants the required permissions and assigns quota on the `USERS` tablespace.
+
+The second step is WebApp table initialization. In `app/main.py` and `scripts/seed_admin.py`, the project calls:
+
+```python
 Base.metadata.create_all(bind=engine)
 ```
 
-This allows SQLAlchemy to automatically create the required tables when the application starts.
+This allows SQLAlchemy to create the required tables based on the model definitions.
 
-This approach is suitable for year project and development environment because it keeps setup simple. For a production system, a migration tool such as Alembic would be more appropriate.
+The default administrator account is created by:
+
+```bash
+python scripts/seed_admin.py
+```
+
+This script:
+
+```text
+1. connects to Docker Oracle through DATABASE_URL;
+2. creates database tables if they do not exist;
+3. checks whether administrator already exists;
+4. hashes the WebApp login password;
+5. encrypts the remote FATE server password;
+6. saves the administrator user into APP_USERS.
+```
 
 ---
 
@@ -2045,7 +2190,7 @@ This design allows each page to load real backend data after rendering.
 
 The frontend currently supports:
 
-```text id="kfctxj"
+```text
 dashboard status display
 dataset upload
 dataset list display
@@ -2061,6 +2206,7 @@ model deletion
 prediction job creation
 prediction list display
 prediction result viewing
+prediction result download
 prediction note editing
 prediction deletion
 ```
@@ -2166,7 +2312,7 @@ The backend reads the selected model and prediction dataset from the database, e
 
 The prediction workflow is:
 
-```text id="n1394n"
+```text
 1. Load the saved training pipeline.
 2. Deploy the trained component.
 3. Connect a prediction dataset through Reader.
@@ -2176,6 +2322,34 @@ The prediction workflow is:
 ```
 
 This allows users to start prediction tasks from the WebApp without manually writing prediction scripts.
+
+After the prediction job is completed, the WebApp can also query and download the prediction result.
+
+The result retrieval workflow is:
+
+```text
+Prediction Job ID
+        ↓
+flow output query-data-table -j <job_id> -r guest -p 9999 -tn homo_lr_0
+        ↓
+Extract result table namespace and name
+        ↓
+flow data download --namespace <namespace> --name <name> --path <output_path>
+        ↓
+Read downloaded files such as data/0.csv and data/0.meta
+        ↓
+Return readable prediction result text to the frontend
+```
+
+The Predicted Page provides two result-related actions:
+
+```text
+View:
+    display the prediction result in a modal window
+
+Download:
+    download the prediction result as a local text file
+```
 
 ---
 
@@ -2261,30 +2435,35 @@ If the user is not authenticated, page routes redirect to the login page, and AP
 
 ## 10.4 Environment File Protection
 
-The project uses a `.env` file to store sensitive configuration.
+The project uses a `.env` file to store local configuration and sensitive values.
 
-This file may contain:
+The `.env` file may contain:
 
-```text id="6ty8nj"
-database connection string
+```text
+Docker Oracle database password
+DATABASE_URL
 APP_SECRET_KEY
 APP_FERNET_KEY
-remote server settings
+remote FATE server host
+remote FATE server username
+remote FATE server password
 FATE runtime settings
 ```
 
 Therefore, `.env` must not be uploaded to GitHub.
 
-I added `.env` to `.gitignore` and provided `.env.example` as a safe template.
+The repository provides `.env.example` as a safe template. Testers should copy it to `.env` and fill in their own local values.
 
 The intended usage is:
 
-```text id="tfal19"
-.env          local real configuration, not committed
+```text
+.env           local real configuration, not committed
 .env.example  public template, committed to GitHub
 ```
 
-For shared testing, the real `.env` should be provided privately rather than placed in the repository. And you can obtain my "testing" file by contacting me: Jiangpw5379@outlook.com.
+The administrator account is created locally by `scripts/seed_admin.py`. The script reads the remote FATE server credentials from `.env`, encrypts the remote server password, and stores it in the local Docker Oracle database.
+
+This is to avoid storing real server credentials in GitHub or in a shared database image.
 
 ---
 
@@ -2507,6 +2686,26 @@ Frontend refreshes prediction list
 
 Prediction depends on the training pipeline file generated during the training stage. If the pipeline file is missing, the prediction task cannot be created successfully.
 
+After the prediction job succeeds, the user can view or download the result from the Predicted Page.
+
+```text
+User clicks View or Download
+        ↓
+Frontend sends POST /api/fate/prediction/result
+        ↓
+Backend queries FATE output table by prediction Job ID
+        ↓
+Backend obtains output table namespace and name
+        ↓
+Backend downloads the result table from FATE
+        ↓
+Backend reads the downloaded CSV/meta files
+        ↓
+Frontend displays the result or downloads it as a local text file
+```
+
+This workflow turns the original manual prediction result retrieval process into a WebApp operation.
+
 ---
 
 ## 11.8 Deletion and Cleanup Workflow
@@ -2562,7 +2761,9 @@ Account: administrator
 Password: 123456
 ```
 
-This account works only when the application is connected to the correct existing database and uses the original `.env` configuration.
+This account is created locally by running `scripts/seed_admin.py` after Docker Oracle and `.env` have been configured.
+
+The administrator account does not depend on a shared pre-filled database. Instead, each tester can create the account in their own local Docker Oracle database.
 
 ---
 
@@ -2626,21 +2827,45 @@ This test confirmed that trained models can be reused later for prediction tasks
 
 ## 12.5 Prediction Test
 
-Prediction was tested after at least one model and one prediction dataset were available.
-
 Test cases included:
 
-| Test Case                | Expected Result                                    |
-| ------------------------ | -------------------------------------------------- |
-| Load prediction models   | Available models are listed                        |
-| Load prediction datasets | Datasets with `predict` usage type are listed      |
-| Create prediction task   | FATE prediction job is submitted                   |
-| Save prediction record   | PredictionRecord is created                        |
-| View prediction result   | Result text is displayed                           |
-| Edit prediction note     | Note is updated                                    |
-| Delete prediction record | Record and generated prediction script are deleted |
+| Test Case                  | Expected Result                                      |
+| -------------------------- | ---------------------------------------------------- |
+| Load prediction models     | Available models are listed                          |
+| Load prediction datasets   | Datasets with `predict` usage type are listed        |
+| Create prediction task     | FATE prediction job is submitted                     |
+| Save prediction record     | PredictionRecord is created                          |
+| Query prediction status    | Prediction status is updated correctly               |
+| View prediction result     | Prediction result is displayed in the WebApp         |
+| Download prediction result | Prediction result is downloaded as a local text file |
+| Edit prediction note       | Note is updated                                      |
+| Delete prediction record   | Record and generated prediction script are deleted   |
 
-This test verified that the prediction workflow can reuse the trained pipeline generated during training.
+During testing, I found that `flow output query-data-table` only returned the prediction output table location, not the real prediction rows.
+
+For example, it returned a namespace and table name for the prediction output table:
+
+```text
+namespace=<prediction_job_id>_homo_lr_0
+name=<generated_output_table_name>
+```
+
+Therefore, I added an additional backend step to download the real result table by using:
+
+```bash
+flow data download --namespace <namespace> --name <name> --path <output_path>
+```
+
+After downloading the output table, the backend reads the generated files, such as:
+
+```text
+data/0.csv
+data/0.meta
+```
+
+The frontend can then display the result through the **View** button or save it locally through the **Download** button.
+
+This test verified that the prediction workflow can reuse the trained pipeline generated during training and that the prediction result can be retrieved and exported from the WebApp.
 
 ---
 
@@ -2662,22 +2887,28 @@ The dashboard test also helped verify whether FATE Flow was running correctly.
 
 ---
 
-## 12.7 GitHub and Environment Configuration Test
+## 12.7 GitHub, Docker Oracle, and Environment Configuration Test
 
-Because the project needed to be uploaded to GitHub, I also tested whether the repository could be cloned and configured again.
+Because the project needed to be uploaded to GitHub, I tested whether the repository could be cloned and configured again using a local Docker Oracle database.
 
-Test steps included:
+The test steps included:
 
 ```text
 1. Clone the repository.
-2. Create a virtual environment.
+2. Create a Python virtual environment.
 3. Install requirements.
-4. Place the correct .env file in the project root.
-5. Start the WebApp with uvicorn.
-6. Log in using the administrator account.
+4. Copy .env.example to .env.
+5. Fill in APP_SECRET_KEY, APP_FERNET_KEY, and remote FATE server credentials.
+6. Start Docker Oracle with docker compose.
+7. Wait until the Oracle container becomes healthy.
+8. Run scripts/seed_admin.py to create the administrator account.
+9. Start the WebApp with uvicorn.
+10. Log in using administrator / 123456.
 ```
 
-This confirmed that the project can be reused as long as the correct `.env` configuration and database are available.
+This confirmed that the project can be reused without connecting to the original external database.
+
+The Docker Oracle database provides a reproducible local database environment, while the remote FATE server configuration is still required for actual FATE operations.
 
 ---
 
@@ -2887,13 +3118,91 @@ Although this solution works, there should be better solutions available that ca
 
 ---
 
-## 13.9 `.env` and GitHub Security Issue
+## 13.9 Prediction Result Could Not Be Displayed or Downloaded Directly
+
+### Problem
+
+After a prediction job was successfully created, the WebApp database stored the prediction record and the prediction Job ID. The prediction status was also shown as successful.
+
+However, clicking the **View** or **Download** button failed to return the actual prediction result.
+
+At first, the backend only executed:
+
+```bash
+flow output query-data-table -j <prediction_job_id> -r guest -p 9999
+```
+
+Later, I found that for the current prediction pipeline, the correct component name should be:
+
+```text
+homo_lr_0
+```
+
+So the output table query should be:
+
+```bash
+flow output query-data-table -j <prediction_job_id> -r guest -p 9999 -tn homo_lr_0
+```
+
+This command did not directly return the prediction rows. It only returned the output table location, including:
+
+```text
+namespace
+name
+```
+
+For example:
+
+```text
+namespace=<prediction_job_id>_homo_lr_0
+name=<generated_output_table_name>
+```
+
+The real prediction result was stored inside this FATE output table.
+
+### Solution
+
+I updated the prediction result retrieval logic in `RemoteFateService`.
+
+The new process is:
+
+```text
+1. Query the prediction output table from homo_lr_0.
+2. Extract the output table namespace and name.
+3. Use flow data download to export the FATE output table.
+4. Read the downloaded CSV/meta files.
+5. Return the readable text to the frontend.
+```
+
+The backend now executes a workflow similar to:
+
+```bash
+flow output query-data-table -j <prediction_job_id> -r guest -p 9999 -tn homo_lr_0
+flow data download --namespace <namespace> --name <name> --path ./output/prediction_<prediction_job_id>
+```
+
+Then it reads the downloaded files such as:
+
+```text
+data/0.csv
+data/0.meta
+```
+
+After this change, the **View** button can display the prediction result in the browser, and the **Download** button can download the prediction result as a local text file.
+
+This solved the problem where the database contained a prediction record but the WebApp could not show the actual prediction output.
+
+---
+
+## 13.10 `.env` and GitHub Security Issue
 
 ### Problem
 
 The project needed to be uploaded to GitHub, but the `.env` file contains sensitive values such as database connection string, application secret key, Fernet key, and remote server configuration.
 
 Uploading `.env` would be unsafe.
+
+In the earlier version, testing also depended on connecting to the original existing database. This was inconvenient because other testers could not easily reproduce the same environment.
 
 ### Solution
 
@@ -2907,11 +3216,26 @@ I configured `.gitignore` to exclude real environment files:
 
 Then I created `.env.example` as a public template.
 
-The real `.env` file is kept locally or shared privately only for testing. The README explains that testers need the correct `.env` file to use the existing administrator account.
+To make testing easier, I migrated the WebApp database to Docker Oracle. Testers can now start a local Oracle XE database with Docker Compose and then run:
+
+```bash
+python scripts/seed_admin.py
+```
+
+This creates the default administrator account locally:
+
+```text
+Account: administrator
+Password: 123456
+```
+
+The remote FATE server password is read from the local `.env` file, encrypted with `APP_FERNET_KEY`, and stored in the local Docker Oracle database.
+
+This avoids committing real credentials or a pre-filled database to GitHub.
 
 ---
 
-## 13.10 Summary of Problems and Solutions
+## 13.11 Summary of Problems and Solutions
 
 The main problems encountered during the project were practical integration issues rather than only programming syntax issues.
 
@@ -2925,8 +3249,10 @@ synchronizing database deletion with FATE and server file deletion
 adding match_id preprocessing for CSV files
 removing static page data and using real API data
 protecting .env before GitHub submission
+migrating the WebApp database to Docker Oracle for reproducible testing
+using scripts/seed_admin.py to create the administrator account locally
 improving Job ID extraction from FATE output
-documenting administrator testing workflow
+adding prediction result retrieval and local download support
 ```
 
 These solutions made the project more stable, easier to test, and more suitable for final submission.
@@ -3038,26 +3364,24 @@ This means the system is not fully independent. Its reliability depends on the a
 
 ---
 
-## 14.5 Complicated Setup for Other Testers
+## 14.5 Setup Still Requires Docker and Remote FATE Configuration
 
-Although the project is uploaded to GitHub, it is still not very easy for other people to test immediately.
+The project is easier to test than before because it now provides a Docker Oracle database. Testers no longer need access to the original external database.
 
-A tester needs:
+However, the setup is still more complex than a normal standalone WebApp because testers still need:
 
 ```text
+Docker Desktop
+Oracle XE image access
 Python environment
 required dependencies
-correct .env file
-database access
-original APP_FERNET_KEY if using the existing administrator account
-remote server access
-FATE Docker environment
+local .env configuration
+remote FATE server access
+valid SSH username and password
 network connection to the remote server
 ```
 
-If any of these conditions are missing, the WebApp may start but FATE-related functions may not work.
-
-This makes the project harder to test compared with a normal standalone web application.
+The local Docker Oracle database solves the database reproducibility problem, but it does not remove the dependency on the remote FATE environment.
 
 ---
 
@@ -3161,11 +3485,12 @@ limited algorithm support
 metrics display not fully implemented
 slow response for remote FATE operations
 strong dependency on network and remote server availability
-complicated setup for other testers
+setup still requires Docker Oracle and remote FATE configuration
 environment-specific FATE integration
 limited multi-user data isolation
 incomplete FATE model deletion
 prediction dependency on generated pipeline files
+prediction result display is still mainly raw text
 lack of database migration support
 ```
 
@@ -3260,14 +3585,20 @@ This would make the system more robust under unstable network conditions.
 
 ## 15.5 Simplify Testing and Deployment for Other Users
 
-The project should be easier for other users to run after downloading from GitHub.
+The project is easier to test than before because the WebApp database can now run through Docker Oracle.
+
+However, the WebApp itself is still started manually with:
+
+```bash
+uvicorn app.main:app --reload
+```
 
 Future improvements may include:
 
 ```text
-providing a local SQLite demo mode
-providing mock FATE mode for UI testing
-providing Docker Compose for the WebApp
+containerizing the FastAPI WebApp itself
+providing a full Docker Compose setup for both WebApp and Oracle database
+providing a mock FATE mode for UI testing
 providing setup scripts
 providing clearer test data samples
 providing example CSV files
@@ -3275,6 +3606,8 @@ providing screenshots and user manual
 ```
 
 A mock mode would be especially useful because testers could explore the UI without needing access to the real remote FATE server.
+
+A full Docker Compose setup would also make the project easier to run because testers could start both the WebApp and the Oracle database with one command.
 
 ---
 
@@ -3314,20 +3647,22 @@ This would make the model module more reliable and easier to maintain.
 
 ## 15.8 Improve Prediction Result Display
 
-The prediction result is currently displayed mainly as raw text.
+The current system can already retrieve prediction results from FATE and download them as a local text file.
 
-Future improvements may include:
+However, the prediction result is still displayed mainly as raw text. Future improvements may include:
 
 ```text
-parsing prediction output into structured tables
-showing prediction labels and probabilities
-allowing result export
+parsing prediction output into structured HTML tables
+showing prediction labels and probabilities in separate columns
+supporting CSV download directly
 adding result filtering
+adding result sorting
 adding result visualization
 linking prediction results with input dataset rows
+showing only the main CSV result instead of all downloaded meta files
 ```
 
-This would make the prediction page more useful for real analysis.
+These improvements would make the prediction page more useful for real analysis.
 
 ---
 
@@ -3413,6 +3748,10 @@ Another important achievement is the integration between the WebApp database and
 Security was also considered in the implementation. WebApp login passwords are stored as hashes, while remote server passwords are encrypted before being saved in the database. JWT access tokens are used for authentication, and sensitive configuration values are stored in `.env` rather than committed to GitHub. The project also provides `.env.example` and README instructions to support safer project sharing and testing.
 
 During the project, several practical problems were encountered and solved. These included remote FATE command execution, server file residue after database deletion, FATE CSV format requirements, inconsistent Job ID extraction, static test data in pages, GitHub environment file protection, and remote/local version conflicts. Solving these issues helped make the system more stable and closer to a usable project.
+
+Another improvement added was the prediction result download function. Initially, the WebApp could save prediction records and prediction Job IDs, but it could not directly show the real prediction output because FATE returned only the output table location. I solved this by adding a backend workflow that queries the output table of `homo_lr_0`, downloads the result table with `flow data download`, reads the downloaded CSV/meta files, and returns the result to the frontend. As a result, users can now view prediction results in the WebApp and download them locally as text files.
+
+The last change was replacing the external database dependency with a Docker Oracle database. In the earlier version, testing depended on connecting to the original database and using the original environment configuration. After the change, testers can start a local Oracle XE container, configure their own `.env` file, run `scripts/seed_admin.py`, and create the default administrator account locally. This improves the reproducibility of the project and makes GitHub-based testing more practical.
 
 However, the current system still has limitations. The algorithm support is mainly limited to Homo Logistic Regression, the metrics visualization function is not fully implemented, remote operations may respond slowly, and the system depends strongly on network availability and the remote FATE server. In addition, testing the project on another machine still requires the correct `.env` file, database access, and FATE environment configuration.
 

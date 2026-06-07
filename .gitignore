@@ -28,3 +28,23 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 .cache/
+
+# Runtime folders
+logs/
+uploads/
+
+# Prediction output files
+output/
+outputs/
+prediction_*/
+*.pkl
+
+# Docker Oracle local data
+oradata/
+oracle-data/
+docker/oracle/oradata/
+docker/oracle/data/
+
+# Temporary files
+*.tmp
+*.bak

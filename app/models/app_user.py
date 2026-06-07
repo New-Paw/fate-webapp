@@ -10,8 +10,7 @@ class AppUser(Base):
     id = Column(
         Integer,
         Sequence("APP_USERS_SEQ"),
-        primary_key=True,
-        index=True
+        primary_key=True
     )
 
     account = Column(String(80), unique=True, nullable=False, index=True)

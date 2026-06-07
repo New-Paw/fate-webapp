@@ -9,3 +9,4 @@ paramiko
 python-jose[cryptography]
 passlib
 cryptography
+pydantic-settings

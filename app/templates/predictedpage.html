@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="row g-4">
-    <div class="col-lg-5">
+    <div class="col-lg-4">
         <div class="card">
             <div class="card-header">Prediction Config</div>
             <div class="card-body">
@@ -27,11 +27,11 @@
         </div>
     </div>
 
-    <div class="col-lg-7">
+    <div class="col-lg-8">
         <div class="card">
             <div class="card-header">Predicted List</div>
             <div class="card-body table-responsive">
-                <table class="table table-striped table-hover align-middle">
+                <table class="table table-striped table-hover align-middle" style="min-width: 980px;">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -39,7 +39,7 @@
                             <th>Dataset</th>
                             <th>Status</th>
                             <th>Time</th>
-                            <th width="260">Actions</th>
+                            <th width="420">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="prediction-table-body">

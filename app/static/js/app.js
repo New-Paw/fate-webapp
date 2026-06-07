@@ -967,11 +967,25 @@ function initPredictionPage() {
                         <td>${escapeHtml(item.dataset_name)}</td>
                         <td><span class="badge ${badgeClass}">${escapeHtml(item.status)}</span></td>
                         <td>${escapeHtml(item.time)}</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-info" onclick="viewPredictionResult('${escapeHtml(item.prediction_job_id)}')">View</button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="openPredictionEdit('${escapeHtml(item.prediction_job_id)}', '${escapeHtml(item.note || "")}')">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deletePrediction('${escapeHtml(item.prediction_job_id)}')">Delete</button>
-                        </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1 justify-content-start action-buttons">
+                            <button class="btn btn-sm btn-outline-info" onclick="viewPredictionResult('${escapeHtml(item.prediction_job_id)}')">
+                                View
+                            </button>
+
+                            <button class="btn btn-sm btn-outline-success" onclick="downloadPredictionResult('${escapeHtml(item.prediction_job_id)}')">
+                                Download
+                            </button>
+
+                            <button class="btn btn-sm btn-outline-secondary" onclick="openPredictionEdit('${escapeHtml(item.prediction_job_id)}', '${escapeHtml(item.note || "")}')">
+                                Edit
+                            </button>
+
+                            <button class="btn btn-sm btn-outline-danger" onclick="deletePrediction('${escapeHtml(item.prediction_job_id)}')">
+                                Delete
+                            </button>
+                        </div>
+                    </td>
                     </tr>
                 `;
             }).join("");
@@ -1054,7 +1068,37 @@ function initPredictionPage() {
             const data = await response.json();
 
             if (!response.ok || !data.success) {
-                throw new Error(data.message || "Failed to load prediction result");
+                const detail = [
+                    data.message || "Failed to load prediction result",
+                    "",
+                    "STDOUT:",
+                    data.stdout || data.raw_stdout || "-",
+                    "",
+                    "STDERR:",
+                    data.stderr || data.raw_stderr || "-",
+                    "",
+                    "QUERY_STDOUT:",
+                    data.query_stdout || "-",
+                    "",
+                    "QUERY_STDERR:",
+                    data.query_stderr || "-",
+                    "",
+                    "DOWNLOAD_STDOUT:",
+                    data.download_stdout || "-",
+                    "",
+                    "DOWNLOAD_STDERR:",
+                    data.download_stderr || "-",
+                    "",
+                    "OUTPUT TABLE:",
+                    `${data.output_namespace || "-"} / ${data.output_table_name || "-"}`
+                ].join("\n");
+
+                document.getElementById("prediction-result-box").textContent = detail;
+
+                const modal = new bootstrap.Modal(document.getElementById("viewPredictionModal"));
+                modal.show();
+
+                return;
             }
 
             // Display the prediction results in the text area of the pop-up window.
@@ -1064,6 +1108,96 @@ function initPredictionPage() {
             const modal = new bootstrap.Modal(document.getElementById("viewPredictionModal"));
             modal.show();
         } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    // Download prediction results.
+    window.downloadPredictionResult = async function (predictionJobId) {
+        try {
+            if (!predictionJobId) {
+                alert("Prediction Job ID is missing.");
+                return;
+            }
+
+            // Request prediction result from backend.
+            const response = await fetch("/api/fate/prediction/result", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prediction_job_id: predictionJobId })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                const detail = [
+                    data.message || "Failed to load prediction result",
+                    "",
+                    "STDOUT:",
+                    data.stdout || data.raw_stdout || "-",
+                    "",
+                    "STDERR:",
+                    data.stderr || data.raw_stderr || "-",
+                    "",
+                    "QUERY_STDOUT:",
+                    data.query_stdout || "-",
+                    "",
+                    "QUERY_STDERR:",
+                    data.query_stderr || "-",
+                    "",
+                    "DOWNLOAD_STDOUT:",
+                    data.download_stdout || "-",
+                    "",
+                    "DOWNLOAD_STDERR:",
+                    data.download_stderr || "-",
+                    "",
+                    "OUTPUT TABLE:",
+                    `${data.output_namespace || "-"} / ${data.output_table_name || "-"}`
+                ].join("\n");
+
+                throw new Error(detail);
+            }
+
+            // Use the same result fields as the View button.
+            const resultText =
+                data.stdout ||
+                data.raw_stdout ||
+                data.raw_stderr ||
+                "No prediction result returned.";
+
+            // Build a readable text file.
+            const fileContent = [
+                "FATE WebApp UI - Prediction Result",
+                "====================================",
+                `Prediction Job ID: ${predictionJobId}`,
+                `Downloaded At: ${new Date().toLocaleString()}`,
+                "",
+                "Result:",
+                "-------",
+                resultText
+            ].join("\n");
+
+            // Create a browser-side text file.
+            const blob = new Blob([fileContent], {
+                type: "text/plain;charset=utf-8"
+            });
+
+            const url = window.URL.createObjectURL(blob);
+
+            // Trigger download.
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `prediction_${predictionJobId}_result.txt`;
+
+            document.body.appendChild(link);
+            link.click();
+
+            // Clean temporary object URL.
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+        } catch (error) {
+            console.error("Download prediction result error:", error);
             alert(error.message);
         }
     };

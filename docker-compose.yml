@@ -1,0 +1,42 @@
+services:
+  oracle-db:
+
+    # Use the official Oracle Database Express Edition 21c image provided by Oracle.
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+
+    # Name the container "fate_oracle_xe" for easier identification and management.
+    container_name: fate_oracle_xe
+
+    shm_size: "1g"
+
+    # 1521 is the port for connecting to the Oracle database.
+    # 5500 is the port for Oracle EM Express management.
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+
+    environment:
+      # ORACLE_PWD is used to set the passwords for database administrators such as SYS, SYSTEM, and PDBADMIN.
+      ORACLE_PWD: ${ORACLE_PWD}
+
+      # ORACLE_CHARACTERSET is used to set the character set for the Oracle database.
+      ORACLE_CHARACTERSET: AL32UTF8
+
+    volumes:
+      # Persist Oracle database files.
+      - oracle_data:/opt/oracle/oradata
+
+      # Initialization script directory.
+      - ./docker/oracle/init:/opt/oracle/scripts/setup
+
+    healthcheck:
+      # Health check: Attempt to connect to XEPDB1 and execute SELECT 1.
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM dual;' | sqlplus -s system/${ORACLE_PWD}@//localhost:1521/XEPDB1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 180s
+
+volumes:
+  # Define a named volume "oracle_data" to persist Oracle database files across container restarts and recreations.
+  oracle_data:

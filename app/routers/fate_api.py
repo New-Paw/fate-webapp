@@ -743,14 +743,42 @@ def prediction_status(
 ):
     return service.get_prediction_progress(req.prediction_job_id)
 
-# Obtain the predicted result text.
+# Query and return prediction result text.
 @router.post("/prediction/result")
 def prediction_result(
     req: PredictionDetailRequest,
     current_user: AppUser = Depends(get_current_user),
     service: RemoteFateService = Depends(get_fate_service),
 ):
-    return service.get_prediction_result_text(req.prediction_job_id)
+
+    result = service.get_prediction_result_text(req.prediction_job_id)
+
+    stdout = result.get("stdout", "")
+    stderr = result.get("stderr", "")
+
+    return {
+        "success": bool(result.get("success")),
+        "prediction_job_id": req.prediction_job_id,
+        "stdout": stdout,
+        "stderr": stderr,
+        "raw_stdout": stdout,
+        "raw_stderr": stderr,
+
+        # Extra debug information.
+        "query_stdout": result.get("query_stdout", ""),
+        "query_stderr": result.get("query_stderr", ""),
+        "download_stdout": result.get("download_stdout", ""),
+        "download_stderr": result.get("download_stderr", ""),
+        "output_namespace": result.get("output_namespace", ""),
+        "output_table_name": result.get("output_table_name", ""),
+        "output_tables": result.get("output_tables", []),
+
+        "message": (
+            "Prediction result loaded successfully."
+            if result.get("success")
+            else "Failed to load prediction result."
+        ),
+    }
 
 # Used to update the remarks of the prediction record.
 @router.put("/prediction/update")

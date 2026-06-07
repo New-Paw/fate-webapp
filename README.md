@@ -16,6 +16,7 @@ The system supports:
 * Training job creation
 * Model record management
 * Prediction job creation
+* Prediction result viewing and local result download
 * Job status, logs, and metrics query
 * Deletion of database records, FATE tables, and generated server files
 
@@ -71,9 +72,18 @@ FATE_WEBAPP/
 │   ├── config.py
 │   ├── db.py
 │   └── main.py
+|
+├── docker/
+│   └── oracle/
+│       └── init/
+│           └── 01_create_app_user.sql
 │
+├── scripts/
+│   └── seed_admin.py
+|
 ├── logs/
 ├── uploads/
+├── docker-compose.yml
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
@@ -121,27 +131,65 @@ Make sure the required database driver is installed. For example, if Oracle is u
 
 ---
 
+### 3.4 Docker Requirement
+
+This project uses Docker Oracle Database for local testing.
+
+Before running the WebApp, make sure Docker Desktop is installed and running.
+
+Check Docker status:
+
+```bash
+docker --version
+docker ps
+```
+
+The Oracle XE image used by this project is:
+
+```text
+container-registry.oracle.com/database/express:21.3.0-xe
+```
+
+If the image is not downloaded automatically by Docker Compose, pull it manually:
+
+```bash
+docker pull container-registry.oracle.com/database/express:21.3.0-xe
+```
+
+If Oracle Container Registry requires authentication, log in first:
+
+```bash
+docker login container-registry.oracle.com
+```
+
+You may need to accept the Oracle Database Express Edition license on Oracle Container Registry before pulling the image.
+
+---
+
 ## 4. Environment Configuration
 
-This project uses a `.env` file to store local configuration and secrets.
+This project uses a local `.env` file to store configuration and secrets.
 
-The real .env file is not uploaded to GitHub.
+The real `.env` file must not be committed to GitHub.  
+The repository only provides `.env.example`.
 
-The repository only include:
-
-.env.example
-
-To create your local `.env` file:
+Create your local `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` and fill in your own values.
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit .env and fill in your own values.
 
 ---
 
-### 4.1 Example `.env` Configuration
+### 4.1 Example `.env` Configuration for Docker Oracle
 
 ```env
 
@@ -153,22 +201,51 @@ APP_PORT=8000
 
 
 # ------------------------------------------------------------
-# Database
-# Oracle format:
-# oracle+oracledb://USERNAME:PASSWORD@HOST:PORT/?service_name=SERVICE_NAME
-# SQLite local test format:
-# sqlite:///./fate_webapp.db
+# Docker Oracle Database
 # ------------------------------------------------------------
-DATABASE_URL=oracle+oracledb://YOUR_DB_USERNAME:YOUR_DB_PASSWORD@YOUR_DB_HOST:1521/?service_name=YOUR_SERVICE_NAME
+# This password is used by the Oracle Docker container.
+ORACLE_PWD=OracleSysPassword123
 
 
 # ------------------------------------------------------------
-# Remote Server SSH Configuration
-# Server username/password should normally be registered through the WebApp UI.
+# WebApp Database Connection
 # ------------------------------------------------------------
-GRACE_HOST=grace1.fit.vutbr.cz
+# FATE_APP is created by: docker/oracle/init/01_create_app_user.sql
+DATABASE_URL=oracle+oracledb://FATE_APP:fate_app_password@127.0.0.1:1521/?service_name=XEPDB1
+
+
+# ------------------------------------------------------------
+# WebApp Authentication
+# ------------------------------------------------------------
+# Generate APP_SECRET_KEY: python -c "import secrets; print(secrets.token_urlsafe(32))"
+APP_SECRET_KEY=replace_with_random_secret_key
+
+# Generate APP_FERNET_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+APP_FERNET_KEY=replace_with_fernet_key
+
+ACCESS_TOKEN_EXPIRE_MINUTES=720
+
+
+# ------------------------------------------------------------
+# Default Administrator Account for Testing
+# ------------------------------------------------------------
+# scripts/seed_admin.py will create:
+# Account: administrator
+# Password: 123456
+ADMIN_ACCOUNT=administrator
+ADMIN_PASSWORD=123456
+
+# These are the SSH credentials for the remote FATE server.
+# ADMIN_SERVER_PASSWORD will be encrypted before being stored in the database.
+ADMIN_SERVER_USERNAME=your_remote_fate_server_username
+ADMIN_SERVER_PASSWORD=your_remote_fate_server_password
+
+
+# ------------------------------------------------------------
+# Remote FATE Server SSH Configuration
+# ------------------------------------------------------------
+GRACE_HOST=your_remote_fate_server_host
 GRACE_PORT=22
-
 
 # ------------------------------------------------------------
 # FATE Docker / Runtime Configuration
@@ -179,38 +256,10 @@ FATE_ROOT=/data/projects/fate
 
 # ------------------------------------------------------------
 # Optional FATE Flow SDK Configuration
-# Used by app/services/fate_client.py if enabled.
 # ------------------------------------------------------------
 FATE_HOST=127.0.0.1
 FATE_PORT=9380
 FATE_API_VERSION=v1
-
-
-# ------------------------------------------------------------
-# WebApp Authentication
-# Generate APP_SECRET_KEY:
-# python -c "import secrets; print(secrets.token_urlsafe(32))"
-# ------------------------------------------------------------
-APP_SECRET_KEY=replace_with_random_secret_key
-
-
-# ------------------------------------------------------------
-# Server Password Encryption Key
-# Generate APP_FERNET_KEY:
-# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Important: # If you want to reuse an existing administrator account from # an existing database, this key must be the same key that was # used when that account was created.
-# Warning:
-# If APP_FERNET_KEY is changed later, previously encrypted server passwords in the database will no longer be decryptable.
-# ------------------------------------------------------------
-APP_FERNET_KEY=replace_with_fernet_key
-
-
-# ------------------------------------------------------------
-# Login Token Expiration
-# Unit: minutes
-# 720 minutes = 12 hours
-# ------------------------------------------------------------
-ACCESS_TOKEN_EXPIRE_MINUTES=720
 ```
 
 ---
@@ -233,145 +282,216 @@ Important:
 
 * `APP_SECRET_KEY` is used to sign JWT access tokens.
 * `APP_FERNET_KEY` is used to encrypt and decrypt remote server passwords.
-* If `APP_FERNET_KEY` is changed after users are registered, previously encrypted server passwords cannot be decrypted.
-* If an existing administrator account should be reused, the original APP_FERNET_KEY must be used.
+* Run scripts/seed_admin.py only after APP_FERNET_KEY, ADMIN_SERVER_USERNAME, and ADMIN_SERVER_PASSWORD are correctly configured.
+* If `APP_FERNET_KEY` is changed after `seed_admin.py` creates the administrator account, the stored remote server password cannot be decrypted.
 
 ---
 
-## 5. Shared Test Environment and Administrator Account
+## 5. Docker Oracle Database and Administrator Account
 
-This project supports a shared test environment for demonstration and testing purposes.
+This project uses a Docker-based Oracle XE database for local testing.
 
-For testing, a preconfigured administrator account is available in the existing project database:
+The repository does not provide a pre-filled database volume and does not include real remote server passwords. Instead, testers create the database locally with Docker Compose and then run `scripts/seed_admin.py` to create the default administrator account.
 
+Default WebApp login account:
+
+```text
 Account: administrator
 Password: 123456
+```
 
-This account can be used to log in to the WebApp after the application is connected to the correct database and environment configuration.
+This account is created by: 
 
-Important: This account is intended for testing only. Do not use this password in a production environment.
+```bash
+python scripts/seed_admin.py
+```
 
----
+The script reads the following values from .env:
 
-### 5.1 Required .env Configuration for Testing
+```env
+ADMIN_ACCOUNT=administrator
+ADMIN_PASSWORD=123456
+ADMIN_SERVER_USERNAME=your_remote_fate_server_username
+ADMIN_SERVER_PASSWORD=your_remote_fate_server_password
+```
 
-The real .env file is not included in this GitHub repository because it contains sensitive configuration such as:
+The WebApp login password is stored as a hash.
 
-Database connection string
-Application secret key
-Fernet encryption key
-Remote server settings
-FATE runtime settings
-
-To use the shared test environment, testers must obtain the real .env file from the project maintainer through a private and secure channel.
-
-After receiving the .env file, place it in the project root directory:
-
-FATE_WEBAPP/
-├── app/
-├── .env
-├── .env.example
-├── requirements.txt
-└── README.md
-
-The .env file must contain the following configuration keys:
-
-DATABASE_URL=
-APP_SECRET_KEY=
-APP_FERNET_KEY=
-ACCESS_TOKEN_EXPIRE_MINUTES=
-
-GRACE_HOST=
-GRACE_PORT=
-
-FATE_CONTAINER=
-FATE_ROOT=
-
-FATE_HOST=
-FATE_PORT=
-FATE_API_VERSION=
-
-The values of these variables must match the original test environment.
+The remote FATE server password is encrypted using APP_FERNET_KEY before being saved into the Docker Oracle database.
 
 ---
 
-### 5.2 Why the Original .env Is Required
+### 5.1 Start Docker Oracle Database
 
-The administrator account already exists in the database.
+Start the Oracle database container:
 
-To use this account correctly, the application must connect to the same database that stores the administrator user record.
+```bash
+docker compose up -d oracle-db
+```
 
-In addition, the existing remote server password stored in the database was encrypted using the original APP_FERNET_KEY.
+Check whether the container is running:
 
-Therefore, the following values must match the original environment:
+```bash
+docker ps
+```
 
-DATABASE_URL
-APP_FERNET_KEY
-APP_SECRET_KEY
-GRACE_HOST
-GRACE_PORT
-FATE_CONTAINER
-FATE_ROOT
+The container should show a healthy status:
 
-If DATABASE_URL points to a different database, the administrator account may not exist.
+```text
+fate_oracle_xe   Up ... (healthy)
+```
 
-If APP_FERNET_KEY is changed, the WebApp may still verify the administrator login password, but it will not be able to decrypt the stored remote server password. In that case, FATE operations that require SSH access may fail.
+View database logs:
+
+```bash
+docker logs -f fate_oracle_xe
+```
+
+When the following message appears, the database is ready:
+
+```text
+DATABASE IS READY TO USE!
+```
 
 ---
 
-### 5.3 Testing Procedure with the Administrator Account
-Clone the repository:
+### 5.2 Oracle Database User
+
+The WebApp connects to Oracle using the application database user:
+
+```text
+Username: FATE_APP
+Password: fate_app_password
+Service: XEPDB1
+```
+
+This user is created by:
+
+```text
+docker/oracle/init/01_create_app_user.sql
+```
+
+The corresponding SQLAlchemy database URL is:
+
+```env
+DATABASE_URL=oracle+oracledb://FATE_APP:fate_app_password@127.0.0.1:1521/?service_name=XEPDB1
+```
+
+---
+
+### 5.3 Create Administrator Account
+
+After Docker Oracle is ready and `.env` is configured, run:
+
+```bash
+python scripts/seed_admin.py
+```
+
+Expected output:
+
+```text
+Initializing database tables...
+Checking administrator account: administrator
+Creating administrator account...
+Administrator account created successfully.
+--------------------------------------------
+Account : administrator
+Password: 123456
+--------------------------------------------
+Remote server password has been encrypted in database.
+```
+
+If the administrator account already exists, the script will not create it again.
+
+---
+
+### 5.4 Testing Procedure
+
+```bash
 git clone https://github.com/New-Paw/fate-webapp.git
 cd fate-webapp
-Create and activate a Python virtual environment:
+
 python -m venv .venv
-source .venv/bin/activate
-
-On Windows:
-
 .venv\Scripts\activate
-Install dependencies:
+
 pip install -r requirements.txt
-Obtain the real .env file from the project maintainer.
-Put the .env file in the project root directory.
+cp .env.example .env
+```
+
+Edit `.env`, then start Oracle:
+
+```bash
+docker compose up -d oracle-db
+```
+
+Create the default administrator:
+
+```bash
+python scripts/seed_admin.py
+```
+
 Start the WebApp:
+
+```bash
 uvicorn app.main:app --reload
-Open the browser:
+```
+
+Open:
+
+```text
 http://127.0.0.1:8000
-Log in with the test account:
+```
+
+Login with:
+
+```text
 Account: administrator
 Password: 123456
-
-After login, testers can use the WebApp.
-
----
-
-### 5.4 When to Register a New Account
-
-Register a new account instead of using the administrator account if:
-
-you are using a new empty database;
-you do not have access to the original .env file;
-you generated a new APP_FERNET_KEY;
-the administrator account does not exist in your database;
-you want to use a different remote server username and password.
-
-During registration:
-
-the WebApp password will be stored as a hash;
-the remote server password will be encrypted using the current APP_FERNET_KEY.
-
----
-
-### 5.5 Security Notes for the Test Account
-
-I did not include any real passwords, real database connections, real Fernet Keys or administrator passwords. The README only describes the usage process and precautions. If you need to test using my original environment, please contact me: Jiangpw5379@outlook.com.
+```
 
 ---
 
 ## 6. How to Run
 
-### 6.1 Start the Web Application
+### 6.1 Start Docker Oracle Database
+
+From the project root directory:
+
+```bash
+docker compose up -d oracle-db
+```
+
+Check status:
+
+```bash
+docker ps
+```
+
+Wait until the Oracle container becomes healthy.
+
+---
+
+### 6.2 Create the Administrator Account
+
+Make sure `.env` has valid values for:
+
+```env
+APP_FERNET_KEY=
+ADMIN_SERVER_USERNAME=
+ADMIN_SERVER_PASSWORD=
+GRACE_HOST=
+GRACE_PORT=
+```
+
+Then run:
+
+```bash
+python scripts/seed_admin.py
+```
+
+---
+
+### 6.3 Start the Web Application
 
 From the project root directory:
 
@@ -385,17 +505,23 @@ Then open the browser:
 http://127.0.0.1:8000
 ```
 
+Login:
+
+```text
+Account: administrator
+Password: 123456
+```
+
 ---
 
-### 6.2 First-Time Usage
+### 6.4 First-Time Usage
 
-1. Open the application in the browser.
-2. Register a WebApp account.
-3. Enter your remote server username and password during registration.
-4. The WebApp password will be stored as a hash.
-5. The remote server password will be encrypted before being stored in the database.
-6. After login, use the web pages to upload datasets, create training jobs, manage models, and run predictions.
-
+1. Start Docker Oracle database.
+2. Configure `.env`.
+3. Run `scripts/seed_admin.py`.
+4. Start the WebApp.
+5. Login with `administrator / 123456`.
+6. Upload datasets, create training jobs, manage models, and run predictions.
 ---
 
 ## 7. Main Features
@@ -445,7 +571,7 @@ Features:
 * Automatically prepare FATE-compatible CSV files
 * Upload datasets to FATE tables
 * Query dataset metadata
-* Download original uploaded files
+* Backend endpoint for downloading uploaded files, although file download is not emphasized as a main UI function in the current version
 * Delete database records, FATE tables, and generated server files
 * Clean orphan files left on the remote server
 
@@ -522,6 +648,7 @@ app/models/prediction_record.py
 app/models/model_record.py
 app/models/uploaded_file.py
 app/services/remote_fate_service.py
+app/static/js/app.js
 ```
 
 Features:
@@ -534,9 +661,28 @@ Features:
 * Save prediction jobs into the job history
 * Query prediction status
 * View prediction results
+* Download prediction results to a local text file
 * Edit prediction notes
 * Delete prediction records
 * Delete generated prediction scripts from the remote server
+
+Prediction results are not stored directly in the WebApp database. The database stores the prediction job record and prediction Job ID. When the user clicks **View** or **Download**, the backend queries the FATE output table, downloads the result data from FATE, reads the generated CSV/meta files, and returns the content to the frontend.
+
+The current prediction result workflow is:
+
+```text
+Prediction Job ID
+        ↓
+flow output query-data-table -tn homo_lr_0
+        ↓
+Get output table namespace and name
+        ↓
+flow data download
+        ↓
+Read downloaded result files
+        ↓
+Display result in WebApp or download result as local .txt file
+```
 
 ---
 
@@ -681,17 +827,40 @@ Prefix:
 
 ### 8.9 Prediction APIs
 
-| Method   | Path                                       | Description                                   |
-| -------- | ------------------------------------------ | --------------------------------------------- |
-| `GET`    | `/api/fate/prediction/models`              | List models available for prediction          |
-| `GET`    | `/api/fate/prediction/datasets`            | List datasets available for prediction        |
-| `POST`   | `/api/fate/prediction/create`              | Create a prediction job                       |
-| `GET`    | `/api/fate/prediction/list`                | List prediction records                       |
-| `POST`   | `/api/fate/prediction/status`              | Query prediction status                       |
-| `POST`   | `/api/fate/prediction/result`              | Get prediction result                         |
-| `PUT`    | `/api/fate/prediction/update`              | Update prediction note                        |
-| `DELETE` | `/api/fate/prediction/{prediction_job_id}` | Delete prediction record and generated script |
-| `POST`   | `/api/fate/prediction/start`               | Start prediction from a pipeline script       |
+| Method   | Path                                       | Description                                                |
+| -------- | ------------------------------------------ | ---------------------------------------------------------- |
+| `GET`    | `/api/fate/prediction/models`              | List models available for prediction                       |
+| `GET`    | `/api/fate/prediction/datasets`            | List datasets available for prediction                     |
+| `POST`   | `/api/fate/prediction/create`              | Create a prediction job                                    |
+| `GET`    | `/api/fate/prediction/list`                | List prediction records                                    |
+| `POST`   | `/api/fate/prediction/status`              | Query prediction status                                    |
+| `POST`   | `/api/fate/prediction/result`              | Query, download from FATE, and return prediction result    |
+| `PUT`    | `/api/fate/prediction/update`              | Update prediction note                                     |
+| `DELETE` | `/api/fate/prediction/{prediction_job_id}` | Delete prediction record and generated prediction script   |
+| `POST`   | `/api/fate/prediction/start`               | Start prediction from a pipeline script                    |
+
+The `/api/fate/prediction/result` endpoint is used by both the **View** button and the **Download** button on the Predicted Page.
+
+It does not read prediction results directly from the WebApp database. Instead, it:
+
+```text
+1. receives prediction_job_id from the frontend;
+2. queries the FATE output table of homo_lr_0;
+3. extracts the result table namespace and name;
+4. downloads the result table using flow data download;
+5. reads the downloaded CSV/meta files;
+6. returns readable text to the frontend.
+```
+
+The frontend uses the returned text in two ways:
+
+```text
+View button:
+    display the prediction result in a modal window
+
+Download button:
+    generate a local .txt file in the browser
+```
 
 ---
 
@@ -833,3 +1002,56 @@ If a task fails, check:
 * Returned `stdout` and `stderr`
 * FATE task error reports
 * Remote generated scripts under `/data/projects/fate/examples`
+
+---
+
+### 9.9 Docker Oracle Database Notes
+
+This project uses Docker Oracle XE for local testing.
+
+The database container is started by:
+
+```bash
+docker compose up -d oracle-db
+```
+
+The Oracle image is:
+
+```text
+container-registry.oracle.com/database/express:21.3.0-xe
+```
+
+The WebApp database user is:
+
+```text
+FATE_APP / fate_app_password
+```
+
+The service name is:
+
+```text
+XEPDB1
+```
+
+If the database needs to be reset during development, run:
+
+```bash
+docker compose down -v
+docker compose up -d oracle-db
+```
+
+Warning:
+
+```text
+docker compose down -v
+```
+
+will remove the Oracle Docker volume and delete all local database data, including uploaded file records, job records, model records, prediction records, and the administrator account.
+
+After resetting the database, run:
+
+```bash
+python scripts/seed_admin.py
+```
+
+again to recreate the administrator account.

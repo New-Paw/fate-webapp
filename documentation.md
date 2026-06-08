@@ -3407,26 +3407,7 @@ For example, if the FATE root path or Docker container name is different, the `.
 
 ---
 
-## 14.7 Limited Multi-User Data Isolation
-
-The system includes user login and authentication, but the current database design does not fully isolate uploaded files, jobs, models, and prediction records by user.
-
-For example, records such as:
-
-```text
-UploadedFile
-JobRecord
-ModelRecord
-PredictionRecord
-```
-
-are not strictly filtered by `user_id` in all queries.
-
-This means that if multiple users use the system, they may see shared records.
-
----
-
-## 14.8 Model Deletion Is Not a Complete FATE Model Deletion
+## 14.7 Model Deletion Is Not a Complete FATE Model Deletion
 
 When deleting a model from the WebApp, the system deletes the local `ModelRecord` and tries to delete the generated pipeline `.pkl` file.
 
@@ -3443,7 +3424,7 @@ rather than a complete cleanup of all FATE internal model artifacts.
 
 ---
 
-## 14.9 Prediction Depends on Saved Pipeline File
+## 14.8 Prediction Depends on Saved Pipeline File
 
 The prediction workflow depends on the training pipeline file generated during training.
 
@@ -3460,23 +3441,7 @@ prediction pipeline generation
 
 ---
 
-## 14.10 Database Schema Migration Is Not Implemented
-
-The application currently uses:
-
-```python
-Base.metadata.create_all(bind=engine)
-```
-
-to create database tables automatically.
-
-This is convenient for development, but it does not handle schema changes for existing databases.
-
-For example, if a new field is added to a model, existing database tables will not be automatically updated.
-
----
-
-## 14.11 Summary of Limitations
+## 14.10 Summary of Limitations
 
 The main limitations of the current system are:
 

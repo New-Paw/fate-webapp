@@ -76,7 +76,7 @@ The system should support:
 * protected pages;
 * protected backend APIs.
 
-For security reasons, WebApp login passwords should not be stored in plain text. Instead, they should be stored as password hashes. After successful login, the system should generate an access token and store it in an HTTP-only cookie so that protected pages and APIs can verify the current user.
+For security reasons, WebApp login passwords is not stored in plain text. Instead, they should be stored as password hashes. After successful login, the system will generate an access token and store it in an HTTP-only cookie so that protected pages and APIs can verify the current user.
 
 ---
 
@@ -97,7 +97,7 @@ WebApp hashes the WebApp login password
         ↓
 WebApp encrypts the remote server password
         ↓
-Encrypted credentials are stored in the database
+Encrypted credentials are stored in the local database
         ↓
 Backend decrypts the remote server password only when SSH access is required
 ```
@@ -114,12 +114,12 @@ The system should allow users to:
 
 * upload CSV files through the browser;
 * choose whether the uploaded file is used for training or prediction;
-* store file metadata in the database;
+* store file metadata in the local database;
 * store the file content or related information for later access;
 * generate FATE-compatible table names and namespaces;
 * upload the dataset into FATE automatically;
 * view dataset details and FATE metadata;
-* delete the dataset from the database, FATE table storage, and generated server files.
+* delete the dataset from the local database, FATE table storage, and generated server files.
 
 This objective is important because dataset preparation is one of the first steps in a FATE experiment. The WebApp should reduce the need for manual file transfer and manual `flow data upload` commands.
 
@@ -136,9 +136,9 @@ The training module should allow users to:
 * dynamically generate a FATE training pipeline script;
 * execute the training script inside the remote FATE Docker container;
 * extract the generated FATE Job ID;
-* save the training job record in the database;
-* save the trained model information in the database;
-* check training progress, logs, and metrics.
+* save the training job record in the local database;
+* save the trained model information in the local database;
+* check training progress and logs.
 
 The current implementation mainly focuses on supporting:
 
@@ -252,7 +252,7 @@ By achieving these objectives, the project provides a practical management layer
 
 # 3. Background and Related Technologies
 
-This project combines federated learning, web application development, database management, remote server operation, and container-based execution. 
+This project combines federated learning, web application development, docker Oracle database management, remote server operation, and container-based execution. 
 
 The system is not only a normal WebApp, but also a management layer built on top of a remote FATE federated learning environment. Therefore, several technologies are involved in different parts of the system, including FATE, FastAPI, SQLAlchemy, Jinja2, JavaScript, SSH, Docker, and environment-based configuration.
 
@@ -453,7 +453,7 @@ SQLAlchemy is important in this project because it provides a structured way to 
 
 ## 3.6 Database System
 
-The project stores WebApp-side application data in an Oracle database. In the latest version of the project, the database is provided through a local Docker Oracle XE container instead of relying on the original external database.
+The project stores WebApp-side application data in an Oracle database. The database is provided through a local Docker Oracle XE container instead of relying on the original external database.
 
 This change improves the reproducibility of the project. Other testers do not need access to the original development database. Instead, they can start their own local Oracle XE database by using Docker Compose.
 
@@ -747,7 +747,7 @@ Backend:
     FastAPI, Jinja2, Pydantic schemas
 
 Database:
-    SQLAlchemy ORM, relational database
+    SQLAlchemy ORM, docker Oracle database container
 
 Authentication:
     Password hashing, JWT token, HTTP-only cookie
@@ -896,7 +896,7 @@ After a file is uploaded, the system should automatically import the dataset int
 The upload process should:
 
 ```text
-1. Save the uploaded file record in the WebApp database.
+1. Save the uploaded file record in the WebApp local database.
 2. Generate a FATE namespace based on the usage type.
 3. Generate a FATE table name based on the file name and database ID.
 4. Write the file to the remote FATE server.
@@ -995,8 +995,8 @@ When the user creates a training job, the system should:
 5. Execute the generated script inside the remote FATE Docker container.
 6. Extract the FATE Job ID from the output.
 7. Extract model information if available.
-8. Save the training job record into the database.
-9. Save the trained model record into the database.
+8. Save the training job record into the local database.
+9. Save the trained model record into the local database.
 10. Return the result to the frontend.
 ```
 
@@ -1091,7 +1091,7 @@ The system should allow users to update local model metadata, including:
 description
 ```
 
-This operation updates the WebApp database record but does not change FATE internal model storage.
+This operation updates the local database record but does not change FATE internal model storage.
 
 ---
 
@@ -1109,7 +1109,7 @@ The system should allow users to run prediction tasks using trained models and u
 
 ### 4.5.1 Prediction Model Selection
 
-The prediction page should load available model records from the database.
+The prediction page should load available model records from the local database.
 
 Users should be able to select a trained model for prediction.
 
@@ -1129,13 +1129,13 @@ When the user creates a prediction job, the system should:
 
 ```text
 1. Receive the selected model ID and prediction dataset ID.
-2. Query the model record from the database.
-3. Query the dataset record from the database.
+2. Query the model record from the local database.
+3. Query the dataset record from the local database.
 4. Extract the saved training pipeline path from the model record.
 5. Dynamically generate a prediction pipeline script.
 6. Execute the prediction script inside the remote FATE Docker container.
 7. Extract the prediction Job ID.
-8. Save the prediction record into the database.
+8. Save the prediction record into the local database.
 9. Save the prediction job into the general job record table.
 10. Return the result to the frontend.
 ```
@@ -1294,7 +1294,7 @@ schemas
 templates
 static files
 configuration
-database setup
+local database setup
 ```
 
 Each module should have a clear responsibility.
@@ -1321,15 +1321,15 @@ The system should handle failures in remote execution and database operations as
 Reliability requirements include:
 
 ```text
-1. If file upload to FATE fails, the database record should be cleaned.
-2. If remote file writing fails, the database record should not remain as a false success.
+1. If file upload to FATE fails, the local database record should be cleaned.
+2. If remote file writing fails, the local database record should not remain as a false success.
 3. If a dataset is deleted, related FATE tables and server files should also be deleted.
 4. If a training or prediction job fails, the system should return stdout, stderr, and task error information.
 5. The system should attempt to verify that a FATE table exists after upload.
 6. Generated files should follow safe naming patterns to avoid accidental deletion of unrelated files.
 ```
 
-These requirements help keep the WebApp database, FATE environment, and remote server files consistent.
+These requirements help keep the local database, FATE environment, and remote server files consistent.
 
 ---
 
@@ -1670,7 +1670,7 @@ User uploads CSV file
         ↓
 Frontend sends POST /api/files/upload
         ↓
-file_storage.py saves file metadata in database
+file_storage.py saves file metadata in local database
         ↓
 RemoteFateService writes file to remote server
         ↓
@@ -1747,7 +1747,7 @@ Backend deletes local database record
 Frontend refreshes the corresponding list
 ```
 
-This flow helps keep the WebApp database, FATE tables, and generated server files consistent.
+This flow helps keep the local database, FATE tables, and generated server files consistent.
 
 ---
 
@@ -2258,13 +2258,13 @@ flow job query ...
 When a user uploads a dataset, the WebApp performs several steps automatically.
 
 ```text id="qxrl9b"
-1. Save the uploaded file record in the database.
+1. Save the uploaded file record in the local database.
 2. Write the file to the remote server.
 3. Prepare a FATE-compatible CSV file.
 4. Generate a FATE upload configuration file.
 5. Run flow data upload inside the FATE container.
 6. Wait for the upload job to finish.
-7. Save the FATE namespace and table name in the database.
+7. Save the FATE namespace and table name in the local database.
 ```
 
 One practical issue I met was that the FATE HomoLR environment required a `match_id` column. The original CSV files may only contain an `id` column. To solve this, I added a preprocessing step that creates a new CSV file with a `match_id` column copied from `id`.
@@ -2298,7 +2298,7 @@ model version
 generated pipeline path
 ```
 
-The system then creates a `JobRecord` and a `ModelRecord` in the database.
+The system then creates a `JobRecord` and a `ModelRecord` in the local database.
 
 The current implementation mainly supports Homo Logistic Regression. The design can be extended later to support more algorithms.
 
@@ -2502,7 +2502,7 @@ User opens /login
         ↓
 User submits account and password
         ↓
-auth.py queries AppUser from the database
+auth.py queries AppUser from the local database
         ↓
 auth_service.py verifies the password hash
         ↓
@@ -2645,7 +2645,7 @@ Backend extracts model_id and model_version
         ↓
 Backend creates ModelRecord
         ↓
-Model page loads records from database
+Model page loads records from local database
         ↓
 User can view, edit, or delete model records
 ```
@@ -2730,7 +2730,7 @@ Frontend refreshes dataset list
 
 For models and predictions, the system also attempts to delete related generated pipeline files or prediction scripts.
 
-This workflow improves consistency between the WebApp database and the remote FATE environment.
+This workflow improves consistency between the local database and the remote FATE environment.
 
 ---
 
@@ -3198,7 +3198,7 @@ This solved the problem where the database contained a prediction record but the
 
 ### Problem
 
-The project needed to be uploaded to GitHub, but the `.env` file contains sensitive values such as database connection string, application secret key, Fernet key, and remote server configuration.
+The project needed to be uploaded to GitHub, but the `.env` file contains sensitive values such as application secret key, Fernet key, and remote server configuration.
 
 Uploading `.env` would be unsafe.
 
@@ -3232,6 +3232,81 @@ Password: 123456
 The remote FATE server password is read from the local `.env` file, encrypted with `APP_FERNET_KEY`, and stored in the local Docker Oracle database.
 
 This avoids committing real credentials or a pre-filled database to GitHub.
+
+---
+
+## 13.11 Slow Database Access and Migration to Docker Oracle Database
+
+### Problem
+
+During development and testing, the WebApp originally depended on an external Oracle database. This caused slow database access in some cases, especially when loading users, datasets, job records, model records, and prediction records.
+
+It also made the project harder for other testers to run from GitHub, because they needed access to the same external database environment.
+
+The old workflow was:
+
+```text
+WebApp
+    ↓
+External Oracle database
+    ↓
+Existing database user and data
+```
+
+If the external database was slow or unavailable, the WebApp could not start or respond normally.
+
+### Solution
+
+I replaced the external database dependency with a local Docker Oracle Database.
+
+The project now provides:
+
+```text
+docker-compose.yml
+docker/oracle/init/01_create_app_user.sql
+scripts/seed_admin.py
+```
+
+The database can be started locally by running:
+
+```bash
+docker compose up -d oracle-db
+```
+
+The SQL initialization script creates the WebApp database user:
+
+```text
+FATE_APP / fate_app_password
+```
+
+Then the administrator account can be created by running:
+
+```bash
+python scripts/seed_admin.py
+```
+
+This creates the default testing account:
+
+```text
+Account: administrator
+Password: 123456
+```
+
+The new workflow is:
+
+```text
+Start Docker Oracle database
+        ↓
+Create FATE_APP database user
+        ↓
+Run seed_admin.py
+        ↓
+Create WebApp tables and administrator account
+        ↓
+Start the WebApp
+```
+
+This made database access more stable for local testing and made the project easier to reproduce after downloading from GitHub.
 
 ---
 
@@ -3452,11 +3527,9 @@ slow response for remote FATE operations
 strong dependency on network and remote server availability
 setup still requires Docker Oracle and remote FATE configuration
 environment-specific FATE integration
-limited multi-user data isolation
 incomplete FATE model deletion
 prediction dependency on generated pipeline files
 prediction result display is still mainly raw text
-lack of database migration support
 ```
 
 These limitations provide clear directions for future improvement.
@@ -3651,17 +3724,7 @@ This would make troubleshooting easier when FATE jobs fail.
 
 ---
 
-## 15.10 Add Database Migration Support
-
-The project should use Alembic or another migration tool to manage database schema changes.
-
-This would allow the database structure to evolve safely when new fields or tables are added.
-
-For example, future fields such as `user_id` or `pipeline_path` could be added through migration scripts instead of manually modifying the database.
-
----
-
-## 15.11 Summary of Future Work
+## 15.10 Summary of Future Work
 
 The most important future improvements are:
 
@@ -3669,11 +3732,12 @@ The most important future improvements are:
 support more algorithms
 complete metrics visualization
 improve operation speed and frontend feedback
+Reduce Network Dependency Where Possible
 simplify testing for other users
 add user-level data isolation
+Improve Model Management
 improve model and prediction result management
 add better logging and error handling
-add database migration support
 ```
 
 These improvements would make the FATE WebApp UI more complete, stable, and suitable for broader usage beyond the current year project environment.
@@ -3708,7 +3772,7 @@ Database, FATE table, and server file cleanup
 
 A key achievement of the project is that it hides many repeated manual operations from the user. Instead of manually logging into the remote server, entering the Docker container, loading the FATE environment, and executing `flow` commands, users can complete the main operations through the WebApp interface.
 
-Another important achievement is the integration between the WebApp database and the remote FATE environment. Uploaded datasets are not only stored as local database records, but are also imported into FATE with corresponding namespaces and table names. Training jobs generate both job records and model records. Prediction jobs generate prediction records and can be tracked from the WebApp. Deletion functions were also improved so that database records, FATE tables, and generated server files can be cleaned more consistently.
+Another important achievement is the integration between the local database and the remote FATE environment. Uploaded datasets are not only stored as local database records, but are also imported into FATE with corresponding namespaces and table names. Training jobs generate both job records and model records. Prediction jobs generate prediction records and can be tracked from the WebApp. Deletion functions were also improved so that database records, FATE tables, and generated server files can be cleaned more consistently.
 
 Security was also considered in the implementation. WebApp login passwords are stored as hashes, while remote server passwords are encrypted before being saved in the database. JWT access tokens are used for authentication, and sensitive configuration values are stored in `.env` rather than committed to GitHub. The project also provides `.env.example` and README instructions to support safer project sharing and testing.
 
